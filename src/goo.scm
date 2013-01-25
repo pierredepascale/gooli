@@ -1,0 +1,1014 @@
+#! /home/pierre/local/bin/gsi -:s
+;;; goo.scm
+
+(define (if? exp) (and (pair? exp) (eq? (car exp) 'if)))
+(define (def? exp) (and (pair? exp) (eq? (car exp) 'def)))
+(define (let? exp) (and (pair? exp) (eq? (car exp) 'let)))
+(define (seq? exp) (and (pair? exp) (eq? (car exp) 'seq)))
+(define (fun? exp) (and (pair? exp) (eq? (car exp) 'fun)))
+(define (defmacro? exp) (and (pair? exp) (eq? (car exp) 'defmacro)))
+(define (defclass? exp) (and (pair? exp) (eq? (car exp) 'defclass)))
+(define (set!? exp) (and (pair? exp) (eq? (car exp) 'set!)))
+
+(define (ev-goo exp env)
+  ;(display ";;eval ") (display exp) (newline)
+  (cond ((literal? exp) (ev-goo-literal exp env))
+        ((symbol? exp) (ev-goo-variable exp env))
+        ((if? exp) (ev-goo-if exp env))
+        ((def? exp) (ev-goo-def exp env))
+        ((let? exp) (ev-goo-let exp env))
+        ((seq? exp) (ev-goo-seq exp env))
+        ((fun? exp) (ev-goo-fun exp env))
+        ((defmacro? exp) (ev-goo-macro exp env))
+        ((defclass? exp) (ev-goo-class exp env))
+	((set!? exp) (ev-goo-set! exp env))
+        ((pair? exp) (ev-goo-application exp env))
+        (else (error "unknown expression ~a to evaluate" exp))))
+
+;;; set!
+
+(define (setter-name basename)
+  (string->symbol (string-append (symbol->string basename) "-setter")))
+
+(define (ev-goo-set! exp env)
+  (let ((dest (cadr exp))
+	(source (caddr exp)))
+    (if (pair? dest)
+	(let ((setter (setter-name (car dest))))
+	  (ev-goo-application `(,setter ,source ,@(cdr dest)) env))
+	(set-var! dest (ev-goo source env) env))))
+
+(define (set-var! name value env)
+  (let ((binding (assq name (env-bindings env))))
+    (if binding
+	(set-cdr! binding value)
+	(error "unknown variable ~a" name))))
+
+;;; class
+
+(define (ev-goo-class exp env)
+  (let ((name (cadr exp))
+        (supers (map (lambda (e) (ev-goo e env)) (caddr exp)))
+        (props (cadddr exp)))
+    (bind-global! name (create-class name supers props))))
+
+;;; macro
+
+(define (ev-goo-macro exp env)
+  (let ((name (cadr exp))
+        (args (caddr exp))
+        (code (cdddr exp)))
+    (bind-global! name (make-macro name (make-method name args (list :list) env code)))))
+
+;;; literal
+
+(define (literal? exp)
+  (or (string? exp)
+      (char? exp)
+      (number? exp)
+      (eq? exp #t)
+      (eq? exp #f)
+      (and (pair? exp) (eq? (car exp) 'quote))))
+
+(define (ev-goo-literal exp env)
+  (if (and (pair? exp) (eq? (car exp) 'quote))
+      (cadr exp)
+      exp))
+
+;;; variable evaluation
+
+(define (make-env module bindings) (cons module bindings))
+(define (env-module env) (car env))
+(define (env-bindings env) (cdr env))
+
+(define (lookup var env)
+  (let ((entry (assq var (env-bindings env))))
+    (if entry
+        (cdr entry)
+        (let ((entry (assq var (module-defined (env-module env)))))
+          (if entry
+              (cdr entry)
+	      (let ((entry (lookup-exported name (env-module env))))
+		(if entry
+		    (cdr entry)
+		    (error "unbound variable ~a in" var env))))))))
+
+(define (ev-goo-variable exp env)
+  (lookup exp env))
+
+;;; if form evaluation
+
+(define (ev-goo-if exp env)
+  (let ((value (ev-goo (cadr exp) env)))
+    (if value
+        (ev-goo (caddr exp) env)
+        (ev-goo (cadddr exp) env))))
+
+;;; def form
+
+(define *goo-modules* '())
+
+(define (make-module name export import defined referenced)
+  (vector 'module name export import defined referenced))
+
+(define (module? obj) (and (vector? obj) (eq? 'module (vector-ref obj 0))))
+(define (module-name m) (vector-ref m 1))
+(define (module-export m) (vector-ref m 2))
+(define (module-import m) (vector-ref m 3))
+(define (module-defined m) (vector-ref m 4))
+(define (set-module-defined! m v) (vector-set! m 4 v))
+(define (module-referenced m) (vector-ref m 5))
+
+(define (find-module name)
+  (let lp ((mods *goo-modules*))
+    (if (eq? name (module-name (car mods)))
+	(car mods)
+	(lp (cdr mods)))))
+
+(define (bind-module! module)
+  (set! *goo-modules* (cons module *goo-modules*)))
+
+(define (lookup-exported name module)
+  (let see-in ((mods (map find-module (module-import module))))
+    (if (null? mods)
+	#f
+	(or (lookup-exported-name name (car mods))
+	    (see-in (cdr mods))))))
+
+(define (lookup-exported-name name module)
+  (and (memq name (module-export module))
+       (assq name (module-defined module))))
+
+(define *goo-runtime* (make-module 'oof-runtime '() '() '() '()))
+
+(define (bind-global! module name value)
+  (let ((binding (assq name (module-defined module))))
+    (if binding
+        (set-cdr! binding value)
+	(let ((defs (module-defined module)))
+	  (set-module-defined! module (cons (cons name value) defs))))))
+  
+(define (bind-def! module name value)
+  (let ((entry (assq name (module-defined module))))
+    (if entry
+        (let ((old (cdr entry)))
+          (cond ((method? old)
+                 (bind-global! module name (make-generic name (method-args old)
+							 (list old value))))
+                ((generic? old)
+                 (generic-add-method! old value))
+                (else (bind-global! module name value))))
+	(bind-global! module name value))))
+
+(define (ev-goo-def exp env)
+  (let ((name (cadr exp))
+        (formals/exp (caddr exp)))
+    (if (null? (cdddr exp))
+        (bind-def! (env-module env) name (ev-goo formals/exp (bind-variable name #f env)))
+        (let ((method (make-method name
+                                   (map car formals/exp)
+                                   (map (lambda (t) (ev-goo (cadr t) env))
+                                        formals/exp)
+                                   env
+                                   (cdddr exp))))
+          (bind-def! (env-module env) name method)))))
+
+;;; binding form
+
+(define (bind-variable var val env)
+  (make-env (env-module env) (cons (cons var val) (env-bindings env))))
+
+(define (bind-variables vars vals env)
+  (if (null? vars)
+      env
+      (bind-variable (car vars) (car vals)
+                     (bind-variables (cdr vars) (cdr vals) env))))
+
+(define (ev-goo-let exp env)
+  (let* ((binding (cadr exp))
+         (vars (map car binding))
+         (vals (map (lambda (b) (ev-goo (cadr b) env)) binding)))
+    (ev-goo-seq (cddr exp)
+                (bind-variables vars vals env))))
+
+;;; seq form
+
+(define (ev-goo-seq exp env)
+  ;(display ";; ev ") (display exp) (display " in ") (display env) (newline)
+  (cond ((null? exp) #f)
+        ((null? (cdr exp)) (ev-goo (car exp) env))
+        (else (ev-goo (car exp) env)
+              (ev-goo-seq (cdr exp) env))))
+
+;;; fun form evaluation
+
+(define (make-macro name expander) (vector 'macro name expander))
+(define (macro? m) (and (vector? m) (eq? 'macro (vector-ref m 0))))
+(define (macro-name m) (vector-ref m 1))
+(define (macro-expander m) (vector-ref m 2))
+
+(define (make-method name args specs env code)
+  (vector 'method name args specs env code))
+(define (method? m) (and (vector? m) (eq? 'method (vector-ref m 0))))
+(define (method-name m) (vector-ref m 1))
+(define (method-args m) (vector-ref m 2))
+(define (method-specs m) (vector-ref m 3))
+(define (method-env m) (vector-ref m 4))
+(define (method-code m) (vector-ref m 5))
+
+(define (make-generic name args methods)
+  (vector 'generic name args methods))
+
+(define (generic? g) (and (vector? g) (eq? 'generic (vector-ref g 0))))
+(define (generic-name g) (vector-ref g 1))
+(define (generic-args g) (vector-ref g 2))
+(define (generic-methods g) (vector-ref g 3))
+
+(define (generic-add-method! g m)
+  (vector-set! g 3 (cons m (generic-methods g))))
+
+(define (method-arg-names args)
+  (map (lambda (a) (if (pair? a) (car a) a)) args))
+
+(define (method-arg-specs args)
+  (map (lambda (a) (if (pair? a) (cadr a) '<any>)) args))
+
+(define (ev-goo-fun exp env)
+  (let* ((args (cadr exp))
+         (names (method-arg-names args))
+         (specs (method-arg-specs args)))
+    (make-method 'anonymous names
+               (map (lambda (e) (ev-goo e env)) specs)
+               env (cddr exp))))
+
+(define (apply-method method args)
+  (let ((names (method-args method))
+        (code (method-code method))
+        (env (method-env method)))
+    (if (procedure? code)
+        (apply code args)
+        (ev-goo-seq code (bind-variables names args env)))))
+
+(define (ev-goo-app-method fun args types env)
+  (apply-method fun args))
+
+(define (ev-goo-app-methods meth next-methods args)
+  (apply-method meth args))
+
+(define (applicable-methods meths args)
+  (if (null? meths)
+      meths
+      (let ((meth (car meths)))
+        (if (method-applicable? meth args)
+            (cons meth (applicable-methods (cdr meths) args))
+            (applicable-methods (cdr meths) args)))))
+            
+(define (method-applicable? meth args)
+  (let applicable? ((types (method-specs meth))
+                    (args args))
+    ;(display (list 'ma? types args)) (newline)
+    (if (null? types)
+        #t
+        (and (is? (car args) (car types))
+             (applicable? (cdr types) (cdr args))))))
+
+(define (method-more-specific? m1 m2)
+  (let specific? ((s1 (method-specs m1))
+                  (s2 (method-specs m2)))
+    (if (null? s1)
+        s1
+        (and (subtype? (car s1) (car s2))
+             (specific? (cdr s1) (cdr s2))))))
+
+(define (sorted-applicable-methods meths)
+  (if (null? meths)
+      '()
+      (let sort ((meths (cdr meths))
+                 (smallest (car meths))
+                 (unordered '()))
+        (if (null? meths)
+            (cons smallest (sorted-applicable-methods unordered))
+            (if (method-more-specific? smallest (car meths))
+                (sort (cdr meths)
+                      smallest
+                      (cons (car meths) unordered))
+                (sort (cdr meths)
+                      (car meths)
+                      (cons smallest unordered)))))))
+
+(define (ev-goo-app-generic fun args types env)
+  (let* ((methods (generic-methods fun))
+         (m1 (applicable-methods methods args))
+         (m2 (sorted-applicable-methods m1)))
+    (ev-goo-app-methods (car m2) (cdr m2) args)))
+
+(define (ev-goo-app-macro macro exp env)
+  (ev-goo (apply-method (macro-expander macro) exp) env))
+
+(define (ev-goo-application exp env)
+  (let ((fun (ev-goo (car exp) env)))
+    (if (macro? fun)
+        (ev-goo-app-macro fun exp env)
+        (let* ((args (map (lambda (e) (ev-goo e env)) (cdr exp)))
+               (types (map class-of args)))
+          (cond ((method? fun) (ev-goo-app-method fun args types env))
+                ((generic? fun) (ev-goo-app-generic fun args types env))
+                (else (error "cannot call ~a" fun)))))))
+
+;;; class
+
+(define (all? pred? lst)
+  (or (null? lst)
+      (and (pred? (car lst)) (all? pred? (cdr lst)))))
+
+(define (any? pred? lst)
+  (if (null? lst)
+      #f
+      (or (pred? (car lst)) (any? pred? (cdr lst)))))
+
+(define (make-singleton value) (vector 'singleton value))
+(define (singleton? obj) (and (vector? obj) (eq? 'singleton (vector-ref obj 0))))
+(define (singleton-value singleton) (vector-ref singleton 1))
+
+(define (make-union . types) (vector 'union types))
+(define (union? obj) (and (vector? obj) (eq? 'union (vector-ref obj 0))))
+(define (union-types union) (vector-ref union 1))
+
+(define (make-subclass class) (vector 'subclass class))
+(define (subclass? class) (and (vector? class) (eq? 'subclass (vector-ref class 0))))
+(define (subclass-class sub) (vector-ref sub 1))
+
+(define (make-class name supers direct-props props)
+  (vector 'class name supers direct-props props))
+
+(define (class? c) (and (vector? c) (eq? 'class (vector-ref c 0))))
+(define (class-name c) (vector-ref c 1))
+(define (class-supers c) (vector-ref c 2))
+(define (class-direct-props c) (vector-ref c 3))
+(define (class-props c) (vector-ref c 4))
+(define (set-class-props! c v) (vector-set! c 4 v))
+
+(define (compute-class-props class)
+  (let collect ((classes (list class)))
+    (if (null? classes)
+        classes
+        (let ((class (car classes)))
+          (append (class-direct-props class)
+                  (collect (append (cdr classes) (class-supers class))))))))
+
+(define (create-class name supers props)
+  (let ((class (make-class name supers props #f)))
+    (set-class-props! class (compute-class-props class))
+    class))
+
+(define (is? obj class)
+  (cond ((class? class) (subtype? (class-of obj) class))
+	((singleton? class) (eq? obj (singleton-value class)))
+	((union? class) (any? (lambda (t) (is? obj t)) (union-types union)))
+	((subclass? class) (and (is? obj <class>) (subtype? obj (subclass-class obj))))
+	(else #f)))
+
+(define (subtype? t1 t2)
+  (cond ((and (class? t1) (class? t2))
+	 (or (eq? t1 t2)
+	     (if (memq t2 (class-supers t1)) #t #f)))
+	((or (singleton? t2) (singleton? t1)) (eq? t1 t2))
+	((union? t2) (some? (lambda (t) (subtype? t1 t2)) (union-types t2)))
+	((subclass? t2) (subtype? t1 (subclass-class t2)))
+	(else (error "unknown type relation" t1 t2))))
+
+(define (class-of obj)
+  (cond ((number? obj) :num)
+        ((boolean? obj) :bool)
+        ((char? obj) :char)
+        ((string? obj) :string)
+        ((symbol? obj) :symbol)
+
+        ((class? obj) :class)
+	((union? obj) :union)
+	((subclass? obj) :subclass)
+	((singleton? obj) :singleton)
+
+        ((pair? obj) :pair)
+        ((null? obj) :nil)
+
+        ((method? obj) :method)
+        ((generic? obj) :generic)
+
+	((input-port? obj) :input-port)
+	((output-port? obj) :output-port)
+
+        (else (instance-class obj))))
+
+(define (make-instance class)
+  (let* ((size (length (class-props class))))
+    (vector 'instance class (make-vector size #f))))
+
+(define (instance? i) (vector? i))
+(define (instance-class i) (vector-ref i 1))
+(define (instance-props i) (vector-ref i 2))
+
+(define (make-prop name type getter setter)
+  (vector 'prop name type getter setter))
+
+;;; runtime
+
+(define :any (create-class '<any> (list) (list)))
+(define :type (create-class '<type> (list :any) (list)))
+(define :class (create-class '<class> (list :type) (list)))
+(define :union (create-class '<union> (list :type) (list)))
+(define :singleton (create-class '<singleton> (list :type) (list)))
+(define :subclass (create-class '<subclass> (list :type) (list)))
+
+(define :mag (create-class '<magnitude> (list :any) (list)))
+(define :num (create-class '<num> (list :mag) (list)))
+(define :bool (create-class '<bool> (list :any) (list)))
+(define :char (create-class '<char> (list :mag) (list)))
+(define :string (create-class '<string> (list :any) (list)))
+(define :symbol (create-class '<symbol> (list :any) (list)))
+
+(define :list (create-class '<list> (list :any) (list)))
+(define :pair (create-class '<pair> (list :list) (list)))
+(define :nil (create-class '<nil> (list :list) (list)))
+
+(define :fun (create-class '<fun> (list :any) (list)))
+(define :method (create-class '<method> (list :fun) (list)))
+(define :generic (create-class '<generic> (list :fun) (list)))
+
+(define :port (create-class '<port> (list :type) (list)))
+(define :input-port (create-class '<input-port> (list :port) (list)))
+(define :output-port (create-class '<output-port> (list :port) (list)))
+
+(define-syntax def
+  (syntax-rules ()
+    ((def ?name ((?arg ?type) ...) . ?body)
+     (bind-def! *goo-runtime* '?name (make-method '?name
+						  '(?arg ...)
+						  (list (ev-goo '?type (make-env *goo-runtime* '())) ...)
+						  #f (lambda (?arg ...) . ?body))))))
+
+(define-syntax boot
+  (syntax-rules ()
+    ((boot ?exp ...) (begin (ev-goo '?exp (make-env *goo-runtime* '())) ...))))
+
+(define-syntax def!
+  (syntax-rules ()
+    ((def! ?name ?val) (bind-global! *goo-runtime* '?name ?val))))
+
+(def! <any> :any)
+(def! <type> :type)
+(def! <class> :class)
+(def! <union> :union)
+(def! <singleton> :singleton)
+(def! <subclass> :subclass)
+
+(def! <magnitude> :mag)
+(def! <num> :num)
+(def! <bool> :bool)
+(def! <char> :char)
+(def! <string> :string)
+(def! <symbol> :symbol)
+
+(def! <list> :list)
+(def! <pair> :pair)
+(def! <nil> :nil)
+
+(def! <fun> :fun)
+(def! <method> :method)
+(def! <generic> :generic)
+
+(def! <input-port> :input-port)
+(def! <output-port> :output-port)
+
+;;; types
+
+(def isa? ((x <any>) (y <type>))
+   (is? x y))
+  
+(def subtype? ((x <type>) (y <type>))
+  (subtype? x y))
+
+(def make ((type <type>) (args <any>))
+  (error "cannot MAKE type"))
+     
+
+(def t= ((x <any>))
+  (make-singleton x))
+
+;; (def <subclass>
+
+(def t< ((class <class>))
+  (make-subclass class))
+
+(def type-class ((x <subclass>))
+  (subclass-class x))
+
+;; (def <union>
+
+(def t+ ((x <type>) (y <type>))
+  (make-union (list x y)))
+
+(def union-elts ((x <union>))
+  (union-types x))
+
+(def t? ((type <type>))
+  (make-union (make-singleton #f) type))
+
+;; (def <product>
+
+;; (def t*
+
+;; (def product-elts ((x <product>))
+
+;; (def <class>
+
+(def class-name ((x <class>))
+  (class-name x))
+
+(def class-parents ((x <class>))
+  (class-supers x))
+
+;; (def class-ancestors ((x <class>)
+
+(def class-direct-props ((x <class>))
+  (class-direct-props x))
+
+(def class-props ((x <class>))
+  (class-props x))
+
+;; (def class-children ((x <class>))
+
+(def make ((type <class>) (args <any>))
+  (make-instance type))
+
+;; (def <prop>
+
+;; (def prop-owner ((x <class>))
+
+;; (def prop-getter ((x <prop>))
+
+;; (def prop-setter ((x <prop>))
+
+;; (def prop-type ((x <prop>))
+
+;; (def prop-init ((x <prop>))
+
+;; (def find-getter ((c <class>) (g <generic>))
+
+;; (def find-setter ((c <class>) (g <generic>))
+
+;; (def prop-bound? (x (g <generic>))
+
+;; (def add-prop (owner (getter <gen>) (setter <gen>) (type <type>) (init <fun>))
+(def make ((x <any>) (args <list>))
+  (initialize (make-instance x)))
+
+(def initialize ((x <any>))
+  x)
+
+;; ;;; FUN
+
+;; (def <fun>
+
+(def fun-name ((x <fun>))
+   (cond ((method? x) (method-name x))
+         ((generic? x) (generic-name x))
+         (else (error "type error"))))
+
+;; (def fun-specs ((x <fun>)
+
+;; (def fun-nary? ((x <fun>))
+
+;; (def fun-arity ((x <fun>>))
+
+;; (def apply ((f <fun>) args...)
+
+;; (def <gen>
+
+(def fun-methods ((x <generic>))
+  (if (generic? x)
+      (generic-methods x)
+      (error "type error: object not a generic")))
+
+(def generic-add-method! ((x <generic>) (y <method>))
+  (if (and (generic? x) (method? y))
+      (generic-add-method! x y)))
+
+(def sorted-applicable-methods ((x <generic>) (args <any>))
+  (sorted-applicable-methods x args))
+
+;; (def <method>
+
+(def method-applicable? ((x <method>) (args <any>))
+  (method-applicable? x args))
+
+;; (def sup
+
+;; ;;; Scalars
+
+(def as ((x <any>) (y <any>))
+  (error "as not defined"))
+
+(def class-of ((x <any>))
+  (class-of x))
+
+(def == ((x <any>) (y <any>))
+  (eq? x y))
+
+(def = ((x <any>) (y <any>))
+  (error "= not specialized"))
+
+(def ~= ((x <any>) (y <any>))
+  (error "~= not speciliazed"))
+
+(def ~== ((x <any>) (y <any>))
+  (not (eq? x y)))
+
+(def to-str ((x <any>))
+  "{any}")
+
+;; ;;;
+
+;; (def <bool>
+
+(def not ((x <bool>))
+  (if x #f #t))
+
+;; (def <magnitude>
+
+(def < ((x <magnitude>) (y <magnitude>)) (error "< not implemented"))
+(def > ((x <magnitude>) (y <magnitude>)) (error "> not implemented"))
+(def <= ((x <magnitude>) (y <magnitude>)) (error "<= not implemented"))
+(def >= ((x <magnitude>) (y <magnitude>)) (error ">= not implemented"))
+
+(boot
+ (def max ((x <magnitude>) (y <magnitude>))
+   (if (< x y) y x))
+ (def min ((x <magnitude>) (y <magnitude>))
+   (if (< x y) x y)))
+
+;; (def <char>
+
+(def alpha? ((x <char>)) (char-alphabetic? x))
+(def digit? ((x <char>)) (char-digit? x))
+(def lower? ((x <char>)) (char-lower-case? x))
+(def upper? ((x <char>)) (char-upper-case? x))
+
+(def < ((x <char>) (y <char>)) (char<? x y))
+(def > ((x <char>) (y <char>)) (char>? x y))
+(def <= ((x <char>) (y <char>)) (char<=? x y))
+(def >= ((x <char>) (y <char>)) (char>=? x y))
+
+;; (def to-digit ((x <char>))
+
+(def lower ((x <char>)) (char-downcase x))
+(def upper ((x <char>)) (char-upcase x))
+
+;; (def <num>
+
+(def + ((x <num>) (y <num>)) (+ x y))
+(def - ((x <num>) (y <num>)) (- x y))
+(def * ((x <num>) (y <num>)) (* x y))
+(def / ((x <num>) (y <num>)) (/ x y))
+
+(def > ((x <num>) (y <num>)) (> x y))
+(def < ((x <num>) (y <num>)) (< x y))
+(def >= ((x <num>) (y <num>)) (>= x y))
+(def <= ((x <num>) (y <num>)) (<= x y))
+
+(def round ((x <num>)) (round x))
+
+;; (def round-to
+
+(def floor ((x <num>)) (floor x))
+(def ceil ((x <num>)) (ceil x))
+(def trunc ((x <num>)) (trunc x))
+(def mod ((x <num>) (y <num>)) (modulo x y))
+(def div ((x <num>) (y <num>)) (quotient x y))
+(def rem ((x <num>) (y <num>)) (remainder x y))
+
+;; (def pow
+
+;; (def exp
+
+(def sqrt ((x <num>)) (sqrt x))
+
+(def positive? ((x <num>)) (>= x 0))
+(def zero? ((x <num>)) (= x 0))
+(def negative? ((x <num>)) (< x 0))
+
+(def neg ((x <num>)) (- x))
+(def abs ((x <num>)) (abs x))
+
+;; (def num-to-string-base
+
+(def num-to-string ((n <num>)) (number->string n))
+(def string-to-num ((n <string>)) (string->number n))
+
+(def! $e 2.71828)
+(def! $pi 3.141592654)
+
+(def sqrt ((x <num>)) (sqrt x))
+(def log ((x <num>)) (log x))
+
+;; (def logn
+
+(def sin ((x <num>)) (sin x))
+(def cos ((x <num>)) (cos x))
+(def tan ((x <num>)) (tan x))
+
+(def asin ((x <num>)) (asin x))
+(def acos ((x <num>)) (acos x))
+(def atan ((x <num>)) (atan x 1))
+(def atan2 ((x <num>) (y <num>)) (atan2 x y))
+
+;; (def sinh
+
+;; (def cosh
+
+;; (def tanh
+
+;; (def <int>
+
+;; (def bit-or
+
+;; (def bit-and
+
+;; (def bit-xor
+
+;; (def ~
+
+;; (def bit?
+
+(def even? ((n <num>)) (= 0 (modulo n 2)))
+(def odd? ((n <num>)) (= 1 (modulo n 2)))
+
+;; (def gcd
+
+;; (def lcm
+
+;; (def <<
+
+;; (def >>
+
+;; (def >>>
+
+;; (def <float>
+
+;; (def float-bits
+
+(def as ((type (t= <num>)) (x <string>)) (string->number x))
+(def as ((type (t= <string>)) (x <num>)) (number->string x))
+
+;; ;;; Sym
+
+;; (def <symbol>
+
+(def as ((type (t= <string>)) (x <symbol>)) (symbol->string x))
+(def as ((type (t= <symbol>)) (x <string>)) (string->string x))
+
+;; (def cat
+
+;; ;;; Conditions
+
+;; (def <condition>
+
+;; (def default-handler
+
+;; (def default-handler-description
+
+;; (def build-condition-interactively
+
+;; (def signal
+
+;; (def <simple-condition>
+
+;; (def condition-message
+
+;; (def condition-arguments
+
+;; (def <serious-condition>
+
+;; (def <error>
+
+;; (def error ((x <string>) args)
+
+;; (def <simple-error>
+
+;; (def <restart>
+
+;; (def <handler>
+
+;; (def handler-function
+
+;; (def handler-matches?
+
+;; (ds try
+
+;; ;;; Ports
+
+;; (def <port>
+
+;; (def open ((t (t< <port>)) (x <string>))
+
+;; (def close ((x <port>))
+
+;; (defmacro (with-port e)
+;;   (let* ((port (cadr e))
+;; 	 (thunk (cddr e)))
+;;     `(let ((,car port) ,(cadr port))
+;;        ,@thunk
+;;        (close-port ,(car port)))))
+
+(def eof-object? ((x <any>))
+  (eof-object? x))
+
+;; (def <input-port>
+
+(def! $in (current-input-port))
+
+(def get ((x <input-port>)) (read-char x))
+(def gets ((x <input-port>)) (read-line x))
+
+(def peek ((x <input-port>)) (peek-char x))
+
+;; (def ready?
+
+;; (def <output-port>
+
+(def! $out (current-output-port))
+;; (def force-output
+
+(def put ((x <char>) (p <output-port>)) (write-char x p))
+(def put ((x <string>) (p <output-port>)) (display x p))
+
+(def newline ((x <output-port>))
+  (newline x))
+
+;; (def say ((x <output-port>) (args ...)))
+
+;; (def <file-port>
+
+;; (def close ((x <file-port>)) (close x))
+
+;; (def <file-input-port>
+
+;; (def open ((x (t= <file-input-port>)) (file-name <string>))
+;;   (open-input-file file-name))
+
+;; (def <file-output-port>
+
+;; (def open ((x (t= <file-output-port>)) (file-name <string>))
+;;   (open-output-file file-name))
+
+;; (def <string-port>
+
+;; (def port-contents ((x <string-port>))
+
+;; (def <string-input-port>
+
+;; (def open
+
+;; (def port-index
+
+;; (def <string-output-port>
+
+;; (def open
+
+;; (ds port-to-string
+
+;;; formatted i/o
+
+;; (def read ((x <input-port>))
+;;   (read x))
+
+;; (def write ((x <output-port>) (y <any>))
+
+;; (def writeln ((x <output-port>) (y <any>))
+
+;; (def emit ((x <output-port>))
+
+;; (def msg ((x <output-port> message args))
+
+;; (def post
+
+;;; collection
+
+;; (def size ((c <col>)) 0)
+;; (def empty? ((l1 <list>)) (null? l1))
+;; (def member? ((e <any>) (lst <list>)) (member e lst))
+;; (def add ((e <any>) (x <col>)) x)
+;; (def copy ((c <col>)) c)
+;; (def fill ((c <col>) (e <any>)) c)
+;; (def delete ((e <any>) (lst <list>)) (delete e lst))
+;; (def replace((e <any>) (by <any>) (c <col>)))
+
+;; (def any? ((f <fun>) (c <col>)) #t)
+;; (def all? ((f <fun>) (c <col>)) #f)
+
+;; (def ++ ((l1 <list>) (l2 <list>)) (append l1 l2))
+
+;; (def reduce ((op <fun>) (l <list>)) l)
+;; (def fold-right ((op <fun>) (zero <any>) (l <list>)) l)
+;; (def fold-left ((op <fun>) (zero <any>) (l <list>)) l)
+
+;; (def map ((op <fun>) (l <list>)) (map op l))
+;; (def each ((op <fun>) (l <list>)) (for-each op l))
+;; (def zip ((op <fun>) (l1 <list>) (l2 <list>)) 0)
+
+;;; pair
+
+;; (def <pair>                             
+
+(def pair ((h <any>) (t <any>)) (cons h t))
+
+(def head ((p <pair>)) (car p))
+(def tail ((p <pair>)) (cdr p))
+(def head ((l <list>)) (error "bad value for HEAD"))
+(def tail ((l <list>)) (error "bad value for TAIL"))
+
+(def empty? ((l1 <list>)) (null? l1))
+(def empty? ((l1 <pair>)) #f)
+(def empty? ((l1 <nil>)) #t)
+
+(def member? ((e <any>) (lst <list>)) (member e lst))
+;; (def add ((e <any>) (x <col>)) x)
+;; (def copy ((c <col>)) c)
+;; (def fill ((c <col>) (e <any>)) c)
+(def delete ((e <any>) (lst <list>)) (delete e lst))
+
+
+;; (def any? ((f <fun>) (c <col>) #t)
+;; (def all? ((f <fun>) (c <col>)) #f)
+
+(def ++ ((l1 <list>) (l2 <list>)) (append l1 l2))
+
+(def reduce ((op <fun>) (l <list>)) l)
+(def fold-right ((op <fun>) (zero <any>) (l <list>)) l)
+(def fold-left ((op <fun>) (zero <any>) (l <list>)) l)
+
+(def map ((op <fun>) (l <list>)) (map op l))
+(def each ((op <fun>) (l <list>)) (for-each op l))
+(def zip ((op <fun>) (l1 <list>) (l2 <list>)) 0)
+
+(def as ((type (t= <list>)) (x <string>)) (string->list x))
+(def as ((type (t= <string>)) (x <list>)) (list->string x))
+
+;(def as ((type (t= <vector>)) (x <list>)) (list->vector x))
+;(def as ((type (t= <list>)) (x <vector>)) (vector->list x))
+
+;;; string
+
+(def ++ ((s1 <string>) (s2 <string>)) (string-append s1 s2))
+(def lower ((s <string>)) (list->string (map char-downcase (string->list s))))
+(def upper ((s <string>)) (list->string (map char-upcase (string->list s))))
+
+;; ;;;
+
+(define (eval-goo-file file-name)
+  (call-with-input-file file-name
+    (lambda (ip)
+      (let lp ((form (read ip)))
+        (if (eof-object? form)
+            '()
+            (begin
+              (ev-goo form (make-env *goo-runtime* '()))
+              (lp (read ip))))))))
+
+(define (print-goo obj)
+  (cond ((number? obj) (display obj))
+        ((boolean? obj) (display obj))
+        ((char? obj) (write obj))
+        ((string? obj) (write obj))
+        ((symbol? obj) (write obj))
+
+        ((class? obj) (display "{class ") (display (class-name obj)) (display "}"))
+	((subclass? obj) (display "{subclass ") (display (class-name (subclass-class obj))) (display "}"))
+	((union? obj) (display "{union}"))
+	((singleton? obj) (display "{singleton ") (display (singleton-value obj)) (display "}"))
+        ((pair? obj) (write obj))
+        ((null? obj) (write obj))
+
+        ((method? obj) (display "{method ") (display (method-name obj)) (display "}"))
+        ((generic? obj) (display "{generic ") (display (generic-name obj)) (display "}"))
+
+        ((instance? obj) (display "{instance ") (display (class-name (instance-class obj))) (display "}"))
+        (else (write obj))))
+
+(define (repl-goo)
+  (display "Welcome !") (newline) (newline)
+  (let repl ()
+    (display "goo> ")
+    (let ((form (read (current-input-port))))
+      (if (eof-object? form)
+          (display "Thank you!")
+          (let ((value (ev-goo form (make-env *goo-runtime* '()))))
+            (display ";; ") (print-goo value) (newline)
+            (repl))))))
+
+(define (main args)
+  (if (null? (cdr args))
+      (repl-goo)
+      (for-each eval-goo-file args)))
+
+(main (command-line))
