@@ -9,7 +9,7 @@ Jonathan Bachrach. The language features:
 
 It is implemented with the Gambit-C system.
 
- ## Installing
+## Installing
 
 The installaion of goo follows the standard GNU procedure:
 
