@@ -1,0 +1,41 @@
+;;; list.gooli -- list
+
+(def pair (h|<any> t|<any>) (%pair h t))
+
+(def head ((p|<pair>)) (%head p))
+(def tail ((p|<pair>)) (%tail p))
+(def head ((l|<list>)) (error "bad value for HEAD"))
+(def tail ((l|<list>)) (error "bad value for TAIL"))
+
+(def empty? (l1|<nil>) #t)
+(def empty? (l1|<pair>) #f)
+
+(def member? (e|<any> lst|<pair>)
+  (if (== e (head lst))
+      #t
+      (member? e (tail lst))))
+
+(def member? (e|<any> lst|<nil>) #f)
+
+(def add (e|<any> x|<list>) (%pair e x))
+
+(def delete (e|<any> lst|<pair>)
+  (if (== e (head lst))
+      (tail lst)
+      (%pair (head lst) (delete e (tail lst)))))
+
+(def reduce (op|<fun> l|<list>))
+(def fold-right (op|<fun> zero|<any> l|<lst>) zero)
+(def fold-left (op|<fun> zero|<any> l|<lst>) zero)
+
+(def list (l) l)
+
+(def map (op|<fun> l|<list>) l)
+(def each (op|<fun> l|<list>) l)
+(def zip (op|<fun> l1|<list> l2|<list>) 0)
+
+(def as (type|(t= <list>) x|<string>) '())
+(def as (type|(t= <string>) x|<list>) "")
+
+(def as (type|(t= <vector>) x|<list>) #())
+(def as (type|(t= <list>) x|<vector>) '())

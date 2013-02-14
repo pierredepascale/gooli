@@ -9,6 +9,8 @@
 (define (defmacro? exp) (and (pair? exp) (eq? (car exp) 'defmacro)))
 (define (defclass? exp) (and (pair? exp) (eq? (car exp) 'defclass)))
 (define (set!? exp) (and (pair? exp) (eq? (car exp) 'set!)))
+(define (use? exp) (and (pair? exp) (eq? (car exp) 'use)))
+(define (export? exp) (and (pair? exp) (eq? (car exp) 'export)))
 
 (define (ev-goo exp env)
   ;(display ";;eval ") (display exp) (newline)
@@ -22,8 +24,29 @@
         ((defmacro? exp) (ev-goo-macro exp env))
         ((defclass? exp) (ev-goo-class exp env))
 	((set!? exp) (ev-goo-set! exp env))
+        ((use? exp) (ev-goo-use exp env))
+        ((export? exp) (ev-goo-export exp env))
         ((pair? exp) (ev-goo-application exp env))
         (else (error "unknown expression ~a to evaluate" exp))))
+
+(define (name->filename name) (string-append name ".gooli"))
+
+(define (ev-goo-use exp env)
+  (let* ((name (cadr exp))
+         (module (find-module name)))
+    (if module
+        (set-module-import! (env-module env)
+                            (cons name (module-import (env-module env))))
+        (let ((module (make-module name '() '() '() '())))
+          ;(display ";; loading module") (display exp) (newline)
+          (load-goo-file (name->filename (symbol->string (cadr exp))) module)
+          (set-module-import! (env-module env)
+                              (cons name (module-import (env-module env))))
+          (bind-module! module)))))
+  
+(define (ev-goo-export exp env)
+  (let ((module (env-module env)))
+    (set-module-export! module (append (cdr exp) (module-export module)))))
 
 ;;; set!
 
@@ -88,7 +111,7 @@
         (let ((entry (assq var (module-defined (env-module env)))))
           (if entry
               (cdr entry)
-	      (let ((entry (lookup-exported name (env-module env))))
+	      (let ((entry (lookup-exported var (env-module env))))
 		(if entry
 		    (cdr entry)
 		    (error "unbound variable ~a in" var env))))))))
@@ -114,32 +137,69 @@
 (define (module? obj) (and (vector? obj) (eq? 'module (vector-ref obj 0))))
 (define (module-name m) (vector-ref m 1))
 (define (module-export m) (vector-ref m 2))
+(define (set-module-export! m e) (vector-set! m 2 e))
 (define (module-import m) (vector-ref m 3))
+(define (set-module-import! m mod) (vector-set! m 3 mod))
 (define (module-defined m) (vector-ref m 4))
 (define (set-module-defined! m v) (vector-set! m 4 v))
 (define (module-referenced m) (vector-ref m 5))
 
 (define (find-module name)
+  ;(display ";; finding module ") (display name) (newline)
   (let lp ((mods *goo-modules*))
-    (if (eq? name (module-name (car mods)))
-	(car mods)
-	(lp (cdr mods)))))
+    (cond ((null? mods) #f)
+          ((eq? name (module-name (car mods)))
+           (car mods))
+          (else (lp (cdr mods))))))
 
 (define (bind-module! module)
   (set! *goo-modules* (cons module *goo-modules*)))
 
 (define (lookup-exported name module)
   (let see-in ((mods (map find-module (module-import module))))
+    ;(display ";; lookup exported ") (display name) (display (map module-name mods))
+    ;(newline)
     (if (null? mods)
 	#f
 	(or (lookup-exported-name name (car mods))
 	    (see-in (cdr mods))))))
 
 (define (lookup-exported-name name module)
+  ;(display ";; lookup exported name ") (display name) (display (module-name module))
+  ;(newline)
   (and (memq name (module-export module))
        (assq name (module-defined module))))
 
-(define *goo-runtime* (make-module 'oof-runtime '() '() '() '()))
+(define *runtime-sig*
+  '(<any> <type> <class> <union> <singleton> <subclass>
+          <magnitude> <num> <int> <float> <bool> <char>
+          <string> <symbol> <list> <pair> <nil> <fun>
+          <method> <generic> <input-port> <output-port>
+          isa? subtype? make t= t< type-class t+ union-elts t?
+          class-name class-parents class-direct-props class-props
+          initialize
+          fun-name fun-methods generic-add-method!
+          sorted-application-methods method-applicable?
+          as class-of == = ~= ~== to-str
+          not < > <= >= max min
+          alpha? digit? lower? upper? + - * / round floor ceil trunc mod  div rem
+          sqrt log positive? zero? negative? neg abs
+          num-to-string string-to-num $e $pi sin cos tan asin acos atan atan2
+          even? odd?
+          eof-object? current-input-port get gets peek
+          current-output-port put newline read
+          pair head tail empty? member? delete ++ reduce fold-right
+          fold-left map each zip
+
+          %pair %head %tail
+          %int->char %char->int %read %write
+          %open-input-file %open-output-file
+          %vector-ref %vector-set!
+          ))
+
+(define *goo-runtime* (make-module 'gooli-runtime *runtime-sig* '() '() '()))
+
+(bind-module! *goo-runtime*)
 
 (define (bind-global! module name value)
   (let ((binding (assq name (module-defined module))))
@@ -378,7 +438,8 @@
 	(else (error "unknown type relation" t1 t2))))
 
 (define (class-of obj)
-  (cond ((number? obj) :num)
+  (cond ((integer? obj) :int)
+        ((real? obj) :float)
         ((boolean? obj) :bool)
         ((char? obj) :char)
         ((string? obj) :string)
@@ -422,6 +483,8 @@
 
 (define :mag (create-class '<magnitude> (list :any) (list)))
 (define :num (create-class '<num> (list :mag) (list)))
+(define :int (create-class '<int> (list :num) (list)))
+(define :float (create-class '<float> (list :num) (list)))
 (define :bool (create-class '<bool> (list :any) (list)))
 (define :char (create-class '<char> (list :mag) (list)))
 (define :string (create-class '<string> (list :any) (list)))
@@ -464,6 +527,8 @@
 
 (def! <magnitude> :mag)
 (def! <num> :num)
+(def! <int> :int)
+(def! <float> :float)
 (def! <bool> :bool)
 (def! <char> :char)
 (def! <string> :string)
@@ -482,37 +547,28 @@
 
 ;;; types
 
-(def isa? ((x <any>) (y <type>))
-   (is? x y))
+;(def isa? ((x <any>) (y <type>)) (is? x y))
   
-(def subtype? ((x <type>) (y <type>))
-  (subtype? x y))
+;(def subtype? ((x <type>) (y <type>)) (subtype? x y))
 
-(def make ((type <type>) (args <any>))
-  (error "cannot MAKE type"))
+;(def make ((type <type>) (args <any>)) (error "cannot MAKE type"))
      
 
-(def t= ((x <any>))
-  (make-singleton x))
+;(def t= ((x <any>)) (make-singleton x))
 
 ;; (def <subclass>
 
-(def t< ((class <class>))
-  (make-subclass class))
+;(def t< ((class <class>)) (make-subclass class))
 
-(def type-class ((x <subclass>))
-  (subclass-class x))
+;(def type-class ((x <subclass>)) (subclass-class x))
 
 ;; (def <union>
 
-(def t+ ((x <type>) (y <type>))
-  (make-union (list x y)))
+;(def t+ ((x <type>) (y <type>)) (make-union (list x y)))
 
-(def union-elts ((x <union>))
-  (union-types x))
+;(def union-elts ((x <union>)) (union-types x))
 
-(def t? ((type <type>))
-  (make-union (make-singleton #f) type))
+;(def t? ((type <type>)) (make-union (make-singleton #f) type))
 
 ;; (def <product>
 
@@ -522,24 +578,19 @@
 
 ;; (def <class>
 
-(def class-name ((x <class>))
-  (class-name x))
+;(def class-name ((x <class>)) (class-name x))
 
-(def class-parents ((x <class>))
-  (class-supers x))
+;(def class-parents ((x <class>)) (class-supers x))
 
 ;; (def class-ancestors ((x <class>)
 
-(def class-direct-props ((x <class>))
-  (class-direct-props x))
+;(def class-direct-props ((x <class>)) (class-direct-props x))
 
-(def class-props ((x <class>))
-  (class-props x))
+;(def class-props ((x <class>)) (class-props x))
 
 ;; (def class-children ((x <class>))
 
-(def make ((type <class>) (args <any>))
-  (make-instance type))
+;(def make ((type <class>) (args <any>)) (make-instance type))
 
 ;; (def <prop>
 
@@ -560,20 +611,18 @@
 ;; (def prop-bound? (x (g <generic>))
 
 ;; (def add-prop (owner (getter <gen>) (setter <gen>) (type <type>) (init <fun>))
-(def make ((x <any>) (args <list>))
-  (initialize (make-instance x)))
+;(def make ((x <any>) (args <list>)) (initialize (make-instance x)))
 
-(def initialize ((x <any>))
-  x)
+;(def initialize ((x <any>)) x)
 
 ;; ;;; FUN
 
 ;; (def <fun>
 
-(def fun-name ((x <fun>))
-   (cond ((method? x) (method-name x))
-         ((generic? x) (generic-name x))
-         (else (error "type error"))))
+;(def fun-name ((x <fun>))
+;   (cond ((method? x) (method-name x))
+;         ((generic? x) (generic-name x))
+;         (else (error "type error"))))
 
 ;; (def fun-specs ((x <fun>)
 
@@ -585,142 +634,134 @@
 
 ;; (def <gen>
 
-(def fun-methods ((x <generic>))
-  (if (generic? x)
-      (generic-methods x)
-      (error "type error: object not a generic")))
+;(def fun-methods ((x <generic>))
+;  (if (generic? x)
+;      (generic-methods x)
+;      (error "type error: object not a generic")))
 
-(def generic-add-method! ((x <generic>) (y <method>))
-  (if (and (generic? x) (method? y))
-      (generic-add-method! x y)))
+;(def generic-add-method! ((x <generic>) (y <method>))
+;  (if (and (generic? x) (method? y))
+;      (generic-add-method! x y)))
 
-(def sorted-applicable-methods ((x <generic>) (args <any>))
-  (sorted-applicable-methods x args))
+;(def sorted-applicable-methods ((x <generic>) (args <any>))
+;  (sorted-applicable-methods x args))
 
 ;; (def <method>
 
-(def method-applicable? ((x <method>) (args <any>))
-  (method-applicable? x args))
+;(def method-applicable? ((x <method>) (args <any>))
+;  (method-applicable? x args))
 
 ;; (def sup
 
 ;; ;;; Scalars
 
-(def as ((x <any>) (y <any>))
-  (error "as not defined"))
+;(def as ((x <any>) (y <any>)) (error "as not defined"))
 
-(def class-of ((x <any>))
-  (class-of x))
+;(def class-of ((x <any>)) (class-of x))
 
-(def == ((x <any>) (y <any>))
-  (eq? x y))
+;(def == ((x <any>) (y <any>)) (eq? x y))
 
-(def = ((x <any>) (y <any>))
-  (error "= not specialized"))
+;(def = ((x <any>) (y <any>)) (error "= not specialized"))
 
-(def ~= ((x <any>) (y <any>))
-  (error "~= not speciliazed"))
+;(def ~= ((x <any>) (y <any>)) (error "~= not speciliazed"))
 
-(def ~== ((x <any>) (y <any>))
-  (not (eq? x y)))
+;(def ~== ((x <any>) (y <any>)) (not (eq? x y)))
 
-(def to-str ((x <any>))
-  "{any}")
+;(def to-str ((x <any>)) "{any}")
 
 ;; ;;;
 
 ;; (def <bool>
 
-(def not ((x <bool>))
-  (if x #f #t))
+;(def not ((x <bool>)) (if x #f #t))
 
 ;; (def <magnitude>
 
-(def < ((x <magnitude>) (y <magnitude>)) (error "< not implemented"))
-(def > ((x <magnitude>) (y <magnitude>)) (error "> not implemented"))
-(def <= ((x <magnitude>) (y <magnitude>)) (error "<= not implemented"))
-(def >= ((x <magnitude>) (y <magnitude>)) (error ">= not implemented"))
+;(def < ((x <magnitude>) (y <magnitude>)) (error "< not implemented"))
+;(def > ((x <magnitude>) (y <magnitude>)) (error "> not implemented"))
+;(def <= ((x <magnitude>) (y <magnitude>)) (error "<= not implemented"))
+;(def >= ((x <magnitude>) (y <magnitude>)) (error ">= not implemented"))
 
-(boot
- (def max ((x <magnitude>) (y <magnitude>))
-   (if (< x y) y x))
- (def min ((x <magnitude>) (y <magnitude>))
-   (if (< x y) x y)))
+; (boot
+;  (def max ((x <magnitude>) (y <magnitude>))
+;    (if (< x y) y x))
+;  (def min ((x <magnitude>) (y <magnitude>))
+;    (if (< x y) x y)))
 
 ;; (def <char>
 
-(def alpha? ((x <char>)) (char-alphabetic? x))
-(def digit? ((x <char>)) (char-digit? x))
-(def lower? ((x <char>)) (char-lower-case? x))
-(def upper? ((x <char>)) (char-upper-case? x))
+;(def alpha? ((x <char>)) (char-alphabetic? x))
+;(def digit? ((x <char>)) (char-digit? x))
+;(def lower? ((x <char>)) (char-lower-case? x))
+;(def upper? ((x <char>)) (char-upper-case? x))
 
-(def < ((x <char>) (y <char>)) (char<? x y))
-(def > ((x <char>) (y <char>)) (char>? x y))
-(def <= ((x <char>) (y <char>)) (char<=? x y))
-(def >= ((x <char>) (y <char>)) (char>=? x y))
+;(def < ((x <char>) (y <char>)) (char<? x y))
+;(def > ((x <char>) (y <char>)) (char>? x y))
+;(def <= ((x <char>) (y <char>)) (char<=? x y))
+;(def >= ((x <char>) (y <char>)) (char>=? x y))
 
 ;; (def to-digit ((x <char>))
 
-(def lower ((x <char>)) (char-downcase x))
-(def upper ((x <char>)) (char-upcase x))
+;(def lower ((x <char>)) (char-downcase x))
+;(def upper ((x <char>)) (char-upcase x))
 
 ;; (def <num>
 
-(def + ((x <num>) (y <num>)) (+ x y))
-(def - ((x <num>) (y <num>)) (- x y))
-(def * ((x <num>) (y <num>)) (* x y))
-(def / ((x <num>) (y <num>)) (/ x y))
+;(def + ((x <num>) (y <num>)) (+ x y))
+;(def - ((x <num>) (y <num>)) (- x y))
+;(def * ((x <num>) (y <num>)) (* x y))
+;(def / ((x <num>) (y <num>)) (/ x y))
 
-(def > ((x <num>) (y <num>)) (> x y))
-(def < ((x <num>) (y <num>)) (< x y))
-(def >= ((x <num>) (y <num>)) (>= x y))
-(def <= ((x <num>) (y <num>)) (<= x y))
+;(def > ((x <num>) (y <num>)) (> x y))
+;(def < ((x <num>) (y <num>)) (< x y))
+;(def >= ((x <num>) (y <num>)) (>= x y))
+;(def <= ((x <num>) (y <num>)) (<= x y))
 
-(def round ((x <num>)) (round x))
+;(def round ((x <num>)) (round x))
 
 ;; (def round-to
 
-(def floor ((x <num>)) (floor x))
-(def ceil ((x <num>)) (ceil x))
-(def trunc ((x <num>)) (trunc x))
-(def mod ((x <num>) (y <num>)) (modulo x y))
-(def div ((x <num>) (y <num>)) (quotient x y))
-(def rem ((x <num>) (y <num>)) (remainder x y))
+;(def floor ((x <num>)) (floor x))
+;(def ceil ((x <num>)) (ceil x))
+;(def trunc ((x <num>)) (trunc x))
+;(def mod ((x <num>) (y <num>)) (modulo x y))
+;(def div ((x <num>) (y <num>)) (quotient x y))
+;(def rem ((x <num>) (y <num>)) (remainder x y))
 
 ;; (def pow
 
 ;; (def exp
 
-(def sqrt ((x <num>)) (sqrt x))
+;(def sqrt ((x <num>)) (sqrt x))
 
-(def positive? ((x <num>)) (>= x 0))
-(def zero? ((x <num>)) (= x 0))
-(def negative? ((x <num>)) (< x 0))
+;(def positive? ((x <num>)) (>= x 0))
+;(def zero? ((x <num>)) (= x 0))
+;(def negative? ((x <num>)) (< x 0))
 
-(def neg ((x <num>)) (- x))
-(def abs ((x <num>)) (abs x))
+;(def neg ((x <num>)) (- x))
+;(def abs ((x <num>)) (abs x))
 
 ;; (def num-to-string-base
 
-(def num-to-string ((n <num>)) (number->string n))
-(def string-to-num ((n <string>)) (string->number n))
+;(def num-to-string ((n <num>)) (number->string n))
+;(def string-to-num ((n <string>)) (string->number n))
 
-(def! $e 2.71828)
-(def! $pi 3.141592654)
+;(def! $e 2.71828)
+;(def! $pi 3.141592654)
 
-(def sqrt ((x <num>)) (sqrt x))
-(def log ((x <num>)) (log x))
+;(def sqrt ((x <num>)) (sqrt x))
+;(def log ((x <num>)) (log x))
 
 ;; (def logn
 
-(def sin ((x <num>)) (sin x))
-(def cos ((x <num>)) (cos x))
-(def tan ((x <num>)) (tan x))
+;(def sin ((x <num>)) (sin x))
+;(def cos ((x <num>)) (cos x))
+;(def tan ((x <num>)) (tan x))
 
-(def asin ((x <num>)) (asin x))
-(def acos ((x <num>)) (acos x))
-(def atan ((x <num>)) (atan x 1))
-(def atan2 ((x <num>) (y <num>)) (atan2 x y))
+;(def asin ((x <num>)) (asin x))
+;(def acos ((x <num>)) (acos x))
+;(def atan ((x <num>)) (atan x 1))
+;(def atan2 ((x <num>) (y <num>)) (atan2 x y))
 
 ;; (def sinh
 
@@ -740,8 +781,8 @@
 
 ;; (def bit?
 
-(def even? ((n <num>)) (= 0 (modulo n 2)))
-(def odd? ((n <num>)) (= 1 (modulo n 2)))
+;(def even? ((n <num>)) (= 0 (modulo n 2)))
+;(def odd? ((n <num>)) (= 1 (modulo n 2)))
 
 ;; (def gcd
 
@@ -757,15 +798,15 @@
 
 ;; (def float-bits
 
-(def as ((type (t= <num>)) (x <string>)) (string->number x))
-(def as ((type (t= <string>)) (x <num>)) (number->string x))
+;(def as ((type (t= <num>)) (x <string>)) (string->number x))
+;(def as ((type (t= <string>)) (x <num>)) (number->string x))
 
 ;; ;;; Sym
 
 ;; (def <symbol>
 
-(def as ((type (t= <string>)) (x <symbol>)) (symbol->string x))
-(def as ((type (t= <symbol>)) (x <string>)) (string->string x))
+;(def as ((type (t= <string>)) (x <symbol>)) (symbol->string x))
+;(def as ((type (t= <symbol>)) (x <string>)) (string->string x))
 
 ;; (def cat
 
@@ -820,30 +861,28 @@
 ;;        ,@thunk
 ;;        (close-port ,(car port)))))
 
-(def eof-object? ((x <any>))
-  (eof-object? x))
+;(def eof-object? ((x <any>)) (eof-object? x))
 
 ;; (def <input-port>
 
-(def! $in (current-input-port))
+;(def current-input-port () (current-input-port))
 
-(def get ((x <input-port>)) (read-char x))
-(def gets ((x <input-port>)) (read-line x))
+;(def get ((x <input-port>)) (read-char x))
+;(def gets ((x <input-port>)) (read-line x))
 
-(def peek ((x <input-port>)) (peek-char x))
+;(def peek ((x <input-port>)) (peek-char x))
 
 ;; (def ready?
 
 ;; (def <output-port>
 
-(def! $out (current-output-port))
+;(def current-output-port () (current-output-port))
 ;; (def force-output
 
 (def put ((x <char>) (p <output-port>)) (write-char x p))
 (def put ((x <string>) (p <output-port>)) (display x p))
 
-(def newline ((x <output-port>))
-  (newline x))
+;(def newline ((x <output-port>)) (newline x))
 
 ;; (def say ((x <output-port>) (args ...)))
 
@@ -879,8 +918,8 @@
 
 ;;; formatted i/o
 
-;; (def read ((x <input-port>))
-;;   (read x))
+;(def read ((x <input-port>))
+;  (read-goo x))
 
 ;; (def write ((x <output-port>) (y <any>))
 
@@ -920,36 +959,35 @@
 
 ;; (def <pair>                             
 
-(def pair ((h <any>) (t <any>)) (cons h t))
+;(def pair ((h <any>) (t <any>)) (cons h t))
 
-(def head ((p <pair>)) (car p))
-(def tail ((p <pair>)) (cdr p))
-(def head ((l <list>)) (error "bad value for HEAD"))
-(def tail ((l <list>)) (error "bad value for TAIL"))
+;(def head ((p <pair>)) (car p))
+;(def tail ((p <pair>)) (cdr p))
+;(def head ((l <list>)) (error "bad value for HEAD"))
+;(def tail ((l <list>)) (error "bad value for TAIL"))
 
-(def empty? ((l1 <list>)) (null? l1))
-(def empty? ((l1 <pair>)) #f)
-(def empty? ((l1 <nil>)) #t)
+;(def empty? ((l1 <list>)) (null? l1))
+;(def empty? ((l1 <pair>)) #f)
+;(def empty? ((l1 <nil>)) #t)
 
-(def member? ((e <any>) (lst <list>)) (member e lst))
+;(def member? ((e <any>) (lst <list>)) (member e lst))
 ;; (def add ((e <any>) (x <col>)) x)
 ;; (def copy ((c <col>)) c)
 ;; (def fill ((c <col>) (e <any>)) c)
-(def delete ((e <any>) (lst <list>)) (delete e lst))
-
+;(def delete ((e <any>) (lst <list>)) (delete e lst))
 
 ;; (def any? ((f <fun>) (c <col>) #t)
 ;; (def all? ((f <fun>) (c <col>)) #f)
 
-(def ++ ((l1 <list>) (l2 <list>)) (append l1 l2))
+;(def ++ ((l1 <list>) (l2 <list>)) (append l1 l2))
 
-(def reduce ((op <fun>) (l <list>)) l)
-(def fold-right ((op <fun>) (zero <any>) (l <list>)) l)
-(def fold-left ((op <fun>) (zero <any>) (l <list>)) l)
+;(def reduce ((op <fun>) (l <list>)) l)
+;(def fold-right ((op <fun>) (zero <any>) (l <list>)) l)
+;(def fold-left ((op <fun>) (zero <any>) (l <list>)) l)
 
-(def map ((op <fun>) (l <list>)) (map op l))
-(def each ((op <fun>) (l <list>)) (for-each op l))
-(def zip ((op <fun>) (l1 <list>) (l2 <list>)) 0)
+;(def map ((op <fun>) (l <list>)) (map op l))
+;(def each ((op <fun>) (l <list>)) (for-each op l))
+;(def zip ((op <fun>) (l1 <list>) (l2 <list>)) 0)
 
 (def as ((type (t= <list>)) (x <string>)) (string->list x))
 (def as ((type (t= <string>)) (x <list>)) (list->string x))
@@ -959,21 +997,206 @@
 
 ;;; string
 
-(def ++ ((s1 <string>) (s2 <string>)) (string-append s1 s2))
-(def lower ((s <string>)) (list->string (map char-downcase (string->list s))))
-(def upper ((s <string>)) (list->string (map char-upcase (string->list s))))
+;(def ++ ((s1 <string>) (s2 <string>)) (string-append s1 s2))
+;(def lower ((s <string>)) (list->string (map char-downcase (string->list s))))
+;(def upper ((s <string>)) (list->string (map char-upcase (string->list s))))
 
-;; ;;;
+(def load ((s <string>)) (eval-goo-file s))
 
-(define (eval-goo-file file-name)
+;;; primitive
+
+(def %pair ((h <any>) (t <any>)) (cons h t))
+(def %head ((p <pair>)) (car p))
+(def %tail ((p <pair>)) (cdr p))
+
+(def %int->char ((ch <int>)) (integer->char ch))
+(def %char->int ((ch <char>)) (char->integer ch))
+
+(def %read ((p <input-port>)) (read-goo p))
+(def %write ((p <output-port>) (o <any>)) (write o p))
+(def %open-input-file ((fn <string>)) (open-output-file fn))
+(def %open-output-file ((fn <string>)) (open-input-file fn))
+(def %vector-ref ((v <vector>) (i <int>)) (vector-ref v i))
+(def %vector-set! ((v <vector>) (i <int>) (o <any>)) (vector-set! v i o))
+
+;; READER
+
+(define (read-goo port)
+  (let ((first (read-token port)))
+    (let ((ch (peek-char port)))
+      (cond ((eof-object? ch) first)
+            ((char=? ch #\|)
+             (read-char port) (list first (read-token port)))
+            (else first)))))
+
+(define (char-symbol-initial? ch)
+  (or (char-alphabetic? ch)
+      (memq ch '(#\+ #\= #\* #\% #\< #\> #\? #\^))))
+
+(define (char-symbol-consequent? ch)
+  (or (char-symbol-initial? ch)
+      (char=? ch #\-)))
+
+(define (read-token port)
+  (let ((ch (read-noise port)))
+    (cond ((eof-object? ch) ch)
+          ((char-numeric? ch) (read-number port))
+          ((char-symbol-initial? ch) (read-symbol port))
+          ((char=? ch #\") (read-string port))
+          ((char=? ch #\#) (read-sharp port))
+          ((char=? ch #\() (read-list port))
+          ((char=? ch #\[) (read-bracket port))
+          ((char=? ch #\,) (read-comma port))
+          ((char=? ch #\`) (read-quasiquote port))
+          ((char=? ch #\{) (read-hash port))
+          ((char=? ch #\') (read-quote port))
+          (else (error "don't know initial character ~a" ch)))))
+
+(define (read-noise port)
+  (let ((ch (peek-char port)))
+    (cond ((eof-object? ch) ch)
+          ((or (char=? ch #\space) (char=? ch #\newline)
+               (char=? ch #\return))
+           (read-char port)
+           (read-noise port))
+          ((char=? ch #\;) (read-comment port) (read-noise port))
+          (else ch))))
+
+(define (read-comment port)
+  (let ((ch (read-char port)))
+    (if (char=? ch #\newline)
+        ch
+        (read-comment port))))
+
+(define (read-number port)
+  (string->number
+   (list->string
+    (let lp ((ch (peek-char port)))
+      (cond ((eof-object? ch) '())
+            ((char-numeric? ch)
+             (read-char port)
+             (cons ch (lp (peek-char port))))
+            (else '()))))))
+
+(define (read-symbol port)
+  (string->symbol
+   (list->string
+    (let lp ((ch (peek-char port)))
+      (cond ((eof-object? ch) '())
+            ((char-symbol-consequent? ch)
+             (read-char port)
+             (cons ch (lp (peek-char port))))
+            (else '()))))))
+    
+(define (read-string port)
+  (read-char port)
+  (list->string
+   (let lp ((ch (read-char port)))
+     (cond ((eof-object? ch) (error "end of file inside string literal"))
+           ((char=? ch #\\) 
+            (let ((next (read-string-special port)))
+              (cons next (lp (read-char port)))))
+           ((char=? ch #\") '())
+           (else (cons ch (lp (read-char port))))))))
+
+(define (read-string-special port)
+  (let ((ch (read-char port)))
+    (cond ((eof-object? ch) (error "end of file in \\ string syntax"))
+          ((char=? ch #\n) #\newline)
+          ((char=? ch #\t) (integer->char 9))
+          (else (error "unknown \\ string syntax ~a" ch)))))
+
+(define (read-sharp port)
+  (read-char port)
+  (let ((ch (read-char port)))
+    (cond ((eof-object? ch) (error "end of file inside a # literal"))
+          ((char=? ch #\\) (read-character port))
+          ((char=? ch #\t) #t)
+          ((char=? ch #\f) #f)
+          ((char=? ch #\() (read-vector port))
+          (else (error "undefined # syntax ~a" ch)))))
+
+(define (read-character port)
+  (let ((ch (read-char port)))
+    (cond ((eof-object? ch) (error "end of file inside character literal"))
+          (else ch))))
+
+(define (read-vector port)
+  (read-char port)
+  (let lp ((lst '()))
+    (read-noise port)
+    (let ((ch (peek-char port)))
+      (cond ((eof-object? ch) (error "end of file inside list"))
+            ((char=? ch #\)) (read-char port) (list->vector (reverse lst)))
+            (else (let ((obj (read-goo port)))
+                    (lp (cons obj lst))))))))
+
+(define (read-list port)
+  (read-char port)
+  (let lp ((lst '()))
+    (read-noise port)
+    (let ((ch (peek-char port)))
+      (cond ((eof-object? ch) (error "end of file inside list"))
+            ((char=? ch #\)) (read-char port) (reverse lst))
+            (else (let ((obj (read-goo port)))
+                    (lp (cons obj lst))))))))
+
+(define (read-bracket port)
+  (read-char port)
+  (let lp ((lst '()))
+    (read-noise port)
+    (let ((ch (peek-char port)))
+      (cond ((eof-object? ch) (error "end of file inside [] form"))
+            ((char=? ch #\]) (read-char port) (cons 'elt (reverse lst)))
+            (else (let ((obj (read-goo port)))
+                    (lp (cons obj lst))))))))
+
+(define (read-comma port)
+  (read-char port)
+  (let ((ch (peek-char port)))
+    (cond ((eof-object? ch) (error "end of file in unquote form"))
+          ((char=? ch #\@) (read-unquote-splicing port))
+          (else
+           (let ((exp (read-goo port)))
+             (cons 'unquote exp))))))
+
+(define (read-unquote-splicing port)
+  (read-char port)
+  (cons 'unquote-splicing (read-goo port)))
+
+(define (read-quasiquote port)
+  (read-char port)
+  (cons 'quasiquote (read-goo port)))
+
+(define (read-hash port)
+  (read-char port)
+  (let lp ((lst '()))
+    (read-noise port)
+    (let ((ch (peek-char port)))
+      (cond ((eof-object? ch) (error "end of file inside [] form"))
+            ((char=? ch #\}) (read-char port) (reverse lst))
+            (else (let* ((key (read-goo port))
+                         (value (read-goo port)))
+                    (lp (cons (cons key value) lst))))))))
+
+(define (read-quote port)
+  (read-char port)
+  (list 'quote (read-goo port)))
+
+;;; TOP LEVEL
+
+(define (load-goo-file file-name module)
   (call-with-input-file file-name
     (lambda (ip)
-      (let lp ((form (read ip)))
+      (let lp ((form (read-goo ip)))
         (if (eof-object? form)
             '()
             (begin
-              (ev-goo form (make-env *goo-runtime* '()))
-              (lp (read ip))))))))
+              (ev-goo form (make-env module '()))
+              (lp (read-goo ip))))))))
+
+(define (eval-goo-file file-name)
+  (load-goo-file file-name *goo-runtime*))
 
 (define (print-goo obj)
   (cond ((number? obj) (display obj))
@@ -995,14 +1218,18 @@
         ((instance? obj) (display "{instance ") (display (class-name (instance-class obj))) (display "}"))
         (else (write obj))))
 
+(define *goo-user* (make-module 'gooli-user '() '(gooli-runtime) '() '()))
+
+(bind-module! *goo-user*)
+
 (define (repl-goo)
   (display "Welcome !") (newline) (newline)
   (let repl ()
     (display "goo> ")
-    (let ((form (read (current-input-port))))
+    (let ((form (read-goo (current-input-port))))
       (if (eof-object? form)
           (display "Thank you!")
-          (let ((value (ev-goo form (make-env *goo-runtime* '()))))
+          (let ((value (ev-goo form (make-env *goo-user* '()))))
             (display ";; ") (print-goo value) (newline)
             (repl))))))
 

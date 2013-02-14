@@ -1,0 +1,5 @@
+;;; collection.gooli
+
+(defclass <collection> ())
+
+(defclass <sequence> (<collection>))

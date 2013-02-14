@@ -1,0 +1,44 @@
+;;; char.gooli -- character procedure
+
+(def alpha? (ch|<char>)
+  (let ((code (as <int> ch)))
+    (or (and (<= (as <int> #\a) code) (<= code (as <int> #\z)))
+        (and (<= (as <int> #\A) code) (<= code (as <int> #\Z))))))
+
+(def digit? (ch|<char>)
+  (let ((code (as <int> ch)))
+    (and (<= (as <int> #\0) code) (<= code (as <int> #\9)))))
+
+(def lower? (ch|<char>)
+  (let ((code (as <int> ch)))
+    (and (<= (as <int> #\a) code) (<= code (as <int> #\z)))))
+
+(def upper? (ch|<char>)
+  (let ((code (as <int> ch)))
+    (and (<= (as <int> #\A) code) (<= code (as <int> #\Z)))))
+
+(def to-digit (ch|<char>)
+  (if (digit? ch)
+      (- (as <int> ch) (as <int> #\0))
+      (value-error "argument is not a digit character ~a" ch)))
+
+(def to-lower (ch|<char>)
+  (if (upper? ch)
+      (as <char> (+ (as <int> #\a) (- (as <int> ch) (as <int> #\A))))
+      ch))
+
+(def to-upper (ch|<char>) #\A)
+  (if (lower? ch)
+      (as <char> (+ (as <int> #\A) (- (as <int> ch) (as <int> #\a))))
+      ch))
+
+(def < (ch1|<char> ch2|<char>)
+  (< (as <int> code1) (as <int> code2)))
+
+(def = (ch1|<char> ch2|<char>) (= (as <int> ch1) (as <int> ch2)))
+
+(def as (type|(t= <char>) n|<int>)
+  (%int->char n))
+
+(def as (type|(t= <int>) ch|<char>)
+  (%char->int ch))

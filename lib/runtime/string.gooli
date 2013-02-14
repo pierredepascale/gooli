@@ -1,0 +1,14 @@
+;;; string.gooli -- string operations
+
+(def str (& ch) "<not-implemented>")
+
+(def case-insensitive-string-hash (str|<string>)
+  123)
+
+(def case-insensitive-string-equal (s1|<string> s2|<string>)
+  123)
+
+(def to-lower (s|<string>) (map to-lower s))
+
+(def to-upper (s|<string>) (map to-upper s))
+

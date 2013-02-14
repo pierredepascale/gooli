@@ -1,0 +1,18 @@
+;;; io.gooli -- io procedure
+
+(defmacro with-port (e)
+  `(let ((,var ,port))
+     (,thunk ,var)
+     (close ,var)))
+
+(def put
+
+(def puts
+
+(def read (p|<input-port>) (%read p))
+
+(def write (p|<output-port> obj|<any>) (%write p obj))
+
+(def open-file (fn|<string>) (%open-input-file fn))
+(def open-file (fn|<string>) (%open-output-file fn))
+

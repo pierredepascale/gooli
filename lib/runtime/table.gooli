@@ -1,0 +1,14 @@
+;;; table.gooli -- table (hash-) operation
+
+(defclass <table> (<collection>)
+  (hash-function <fun> #f)
+  (table-storage <vector> #()))
+
+(def elt (table|<table> key|<any>)
+  (let ((i ((hash-function table) key)))
+    [(table-storage table) i]))
+
+(def elt-setter (table|<table> key|<any> value|<any>)
+  (let ((i ((hash-function table) key)))
+    (set [(table-storage) key] value)))
+

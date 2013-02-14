@@ -13,18 +13,18 @@ It is implemented with the Gambit-C system.
 
 The installaion of goo follows the standard GNU procedure:
 
-% ./configure
-% make
-% make install
+    % ./configure
+    % make
+    % make install
 
 ## Running
 
 Gooli supports evaluating forms in a REPL and evaluating an entire
 file. Start a REPL with:
 
-% goo.scm
+    % goo.scm
 
 To evaluate a file, do:
 
-% goo.scm <file.goo>
+    % goo.scm <file.goo>
 

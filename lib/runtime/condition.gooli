@@ -1,0 +1,32 @@
+;;; condition.gooli -- condition definition
+
+(defclass <condition> ())
+
+(def default-handler-description (c|<condition>) "No description")
+(def default-handler (c|<condition>))
+
+(def signal (c|<condition> args|<any>))
+
+(defclass <simple-condition> (<condition>)
+  (condition-message <any> "")
+  (condition-arguments <list> '()))
+
+(defclass <serious-condition> (<condition>))
+
+(defclass <error> (<serious-condition>))
+
+(def error (c|<error> args|<list>))
+(def error (s|<string> args|<list>))
+
+(defclass <simple-error> (<error> <simple-condition>))
+
+(defclass <restart> (<condition>))
+
+(defclass <handler> (<any>)
+  (handler-function <fun> #f))
+
+(def make-handler (f|<fun>))
+
+(def handler-matches? (x|<handler> c|<condition>))
+
+(defmacro try (e) 'error)

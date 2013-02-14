@@ -1,0 +1,7 @@
+;;; string.gooli
+
+(def lower (s|<string>) s)
+(def upper (s|<string>) s)
+
+(def hash (s|<string>) 12)
+
