@@ -31,6 +31,20 @@
 
 (define (name->filename name) (string-append name ".gooli"))
 
+(define *module-path* '("./"))
+
+(define (locate-file fn)
+  (let lp ((paths *module-path*))
+    (display paths) (newline)
+    (if (null? paths)
+	(error "Couldn't find module ~a" fn)
+	(let* ((path (car paths))
+	       (filename (string-append path "/" fn)))
+	  (display ";; testing") (display filename) (newline)
+	  (if (file-exists? filename)
+	      filename
+	      (lp (cdr paths)))))))
+      
 (define (ev-goo-use exp env)
   (let* ((name (cadr exp))
          (module (find-module name)))
@@ -39,7 +53,7 @@
                             (cons name (module-import (env-module env))))
         (let ((module (make-module name '() '() '() '())))
           ;(display ";; loading module") (display exp) (newline)
-          (load-goo-file (name->filename (symbol->string (cadr exp))) module)
+          (load-goo-file (locate-file (name->filename (symbol->string (cadr exp)))) module)
           (set-module-import! (env-module env)
                               (cons name (module-import (env-module env))))
           (bind-module! module)))))
@@ -85,12 +99,16 @@
 
 ;;; literal
 
+(define (keyword? obj)
+  (and (symbol? obj) (char=? #\: (string-ref (symbol->string obj) 0))))
+
 (define (literal? exp)
   (or (string? exp)
       (char? exp)
       (number? exp)
       (eq? exp #t)
       (eq? exp #f)
+      (keyword? exp)
       (and (pair? exp) (eq? (car exp) 'quote))))
 
 (define (ev-goo-literal exp env)
@@ -195,6 +213,8 @@
           %int->char %char->int %read %write
           %open-input-file %open-output-file
           %vector-ref %vector-set!
+
+	  %dbg
           ))
 
 (define *goo-runtime* (make-module 'gooli-runtime *runtime-sig* '() '() '()))
@@ -450,6 +470,7 @@
 	((subclass? obj) :subclass)
 	((singleton? obj) :singleton)
 
+	((vector? obj) :vector)
         ((pair? obj) :pair)
         ((null? obj) :nil)
 
@@ -493,6 +514,8 @@
 (define :list (create-class '<list> (list :any) (list)))
 (define :pair (create-class '<pair> (list :list) (list)))
 (define :nil (create-class '<nil> (list :list) (list)))
+
+(define :vector (create-class '<vector> (list) (list)))
 
 (define :fun (create-class '<fun> (list :any) (list)))
 (define :method (create-class '<method> (list :fun) (list)))
@@ -538,6 +561,7 @@
 (def! <pair> :pair)
 (def! <nil> :nil)
 
+(def! <vector> :vector)
 (def! <fun> :fun)
 (def! <method> :method)
 (def! <generic> :generic)
@@ -547,28 +571,28 @@
 
 ;;; types
 
-;(def isa? ((x <any>) (y <type>)) (is? x y))
+(def isa? ((x <any>) (y <type>)) (is? x y))
   
-;(def subtype? ((x <type>) (y <type>)) (subtype? x y))
+(def subtype? ((x <type>) (y <type>)) (subtype? x y))
 
 ;(def make ((type <type>) (args <any>)) (error "cannot MAKE type"))
      
 
-;(def t= ((x <any>)) (make-singleton x))
+(def t= ((x <any>)) (make-singleton x))
 
 ;; (def <subclass>
 
-;(def t< ((class <class>)) (make-subclass class))
+(def t< ((class <class>)) (make-subclass class))
 
-;(def type-class ((x <subclass>)) (subclass-class x))
+(def type-class ((x <subclass>)) (subclass-class x))
 
 ;; (def <union>
 
-;(def t+ ((x <type>) (y <type>)) (make-union (list x y)))
+(def t+ ((x <type>) (y <type>)) (make-union (list x y)))
 
 ;(def union-elts ((x <union>)) (union-types x))
 
-;(def t? ((type <type>)) (make-union (make-singleton #f) type))
+(def t? ((type <type>)) (make-union (make-singleton #f) type))
 
 ;; (def <product>
 
@@ -578,9 +602,9 @@
 
 ;; (def <class>
 
-;(def class-name ((x <class>)) (class-name x))
+(def class-name ((x <class>)) (class-name x))
 
-;(def class-parents ((x <class>)) (class-supers x))
+(def class-parents ((x <class>)) (class-supers x))
 
 ;; (def class-ancestors ((x <class>)
 
@@ -1012,6 +1036,7 @@
 (def %int->char ((ch <int>)) (integer->char ch))
 (def %char->int ((ch <char>)) (char->integer ch))
 
+(def %dbg ((o <any>)) (write o))
 (def %read ((p <input-port>)) (read-goo p))
 (def %write ((p <output-port>) (o <any>)) (write o p))
 (def %open-input-file ((fn <string>)) (open-output-file fn))
@@ -1031,7 +1056,7 @@
 
 (define (char-symbol-initial? ch)
   (or (char-alphabetic? ch)
-      (memq ch '(#\+ #\= #\* #\% #\< #\> #\? #\^))))
+      (memq ch '(#\: #\+ #\= #\* #\% #\< #\> #\? #\^))))
 
 (define (char-symbol-consequent? ch)
   (or (char-symbol-initial? ch)
@@ -1233,9 +1258,23 @@
             (display ";; ") (print-goo value) (newline)
             (repl))))))
 
-(define (main args)
-  (if (null? (cdr args))
+(define (main . args)
+  (if (null? args)
       (repl-goo)
-      (for-each eval-goo-file args)))
+      (let lp ((args args))
+	(if (null? args)
+	    'ok
+	    (let ((arg (car args)))
+	      (cond ((string=? arg "--path")
+		     (if (pair? (cdr args))
+			 (begin
+			   (set! *module-path* (cons (cadr args) *module-path*))
+			   (lp (cddr args)))
+			 (error "missing argument to --path option")))
+		    ((string=? arg "--repl")
+		     (repl-goo))
+		    (else
+		     (display ";; evaluating ") (display arg) (newline)
+		     (eval-goo-file arg)
+			  (lp (cdr args)))))))))
 
-(main (command-line))
