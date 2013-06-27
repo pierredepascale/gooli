@@ -1,0 +1,52 @@
+;;; type.gooli
+
+(def isa? (x|<any> y|<type>)
+  (%is? x y))
+
+(def subtype? (x|<type> y|<type>)
+  (%subtype x y))
+
+(def make (type|<type> &rest args)
+  (let ((instance (%alloc-instance type)))
+    (initialize instance args)))
+
+(def init (instance|<any> args)
+  instance)
+
+(def t= (x|<any>) (%make-singleton x))
+
+(def t< (class|<class>) (make-subclass class))
+
+(def type-class (x|<subclass>) (%subclass-class x))
+
+(def t+ (x|<type> y|<type>) (%make-union x y))
+
+(def t? (type|<type>) (%make-union (make-singleton #f) type))
+
+(def class-name (x |<class>) (%class-name x))
+
+(def class-parents (x|<class>) (%class-supers x))
+
+(def class-direct-props (x|<class>) (%class-direct-props x))
+
+(def class-props (x|<class>) (%class-props x))
+
+(def prop-owner (x|<class>) (error ""))
+
+(def prop-getter (x|<prop>) (error ""))
+
+(def prop-setter (x|<prop>) (error ""))
+
+(def prop-type (x|<prop>) (error ""))
+
+(def prop-init (x|<prop>) (error ""))
+
+(def prop-bound? (x gen|<generic>) (error ""))
+
+(export isa? subtype? make init
+        t=
+        t< type-class
+        t+
+        t?
+        class-name class-parents class-direct-props class-props
+        prop-owner prop-getter prop-type prop-init prop-bound?)

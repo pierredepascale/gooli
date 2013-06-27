@@ -5,10 +5,6 @@
      (,thunk ,var)
      (close ,var)))
 
-(def put
-
-(def puts
-
 (def read (p|<input-port>) (%read p))
 
 (def write (p|<output-port> obj|<any>) (%write p obj))
@@ -16,3 +12,27 @@
 (def open-file (fn|<string>) (%open-input-file fn))
 (def open-file (fn|<string>) (%open-output-file fn))
 
+(def eof-object? (x|<any>) (%eof-object? x))
+
+(def get (x|<input-port) (%read-chasr x))
+(def gets (x|<input-port>) (%read-line x))
+
+(def peek (x|<input-port>) (%peek-char x))
+
+;(defclass <output-port> (<port>))
+
+(def current-output-port () #t)
+
+(def put (x|<char> p|<output-port>) (%write-char x p))
+(def put (x|<string> p|<output-port>) (%display x p))
+
+(def say (x|<output-port> &rest args) #t)
+
+(def write (x|<output-port> y|<any>) #t)
+(def writeln (x|<output-port> y|<any>) #t)
+
+(def emit (x|<output-port>) #t)
+
+(def msg (x|<output-port>) #t)
+
+(def post () #t)

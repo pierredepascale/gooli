@@ -1,0 +1,108 @@
+;;; scalar.gooli --
+
+(def as (x|<type> y|<any>)
+  (if (isa? x y)
+      x
+      (error "as method not defined")))
+
+(def == (x|<any> y|<any>) (%eq? x y))
+
+(def = (x|<any> y|<any>)
+  (error "no = method defined"))
+
+(def ~= (x|<any> y|<any>) (if (= x y) #f #t))
+
+(def ~== (x|<any> y|<any>) (if (== x y) #f #t))
+
+(def to-str (x|<any>) "{any}")
+
+(def not (x|<bool>) (if x #f #t))
+
+(def < (x|<mag> y|<mag>) (error "< not implemented"))
+(def > (x|<mag> y|<mag>) (error "> not implemented"))
+(def <= (x|<mag> y|<mag>) (error "<= not implemented"))
+(def >= (x|<mag> y|<mag>) (error ">= not implemented"))
+
+(def max () #t)
+(def min () #t)
+
+;; numbers
+
+(def + (x|<num> y|<num>) (%+ x y))
+(def - (x|<num> y|<num>) (%- x y))
+(def * (x|<num> y|<num>) (%* x y))
+(def / (x|<num> y|<num>) (%/ x y))
+
+(def > (x|<num> y|<num>) (%> x y))
+(def < (x|<num> y|<num>) (%< x y))
+(def >= (x|<num> y|<num>) (%>= x y))
+(def <= (x|<num> y|<num>) (%<= x y))
+
+(def round (x|<num>) (%round x))
+
+(def floor (x|<num>) (%floor x))
+(def ceil (x|<num>) (%ceil x)
+(def trunc (x|<num>) (%trunc x)
+(def mod (x|<num>) (%mod x)
+(def div (x|<num>) (%div x)
+(def rem (x|<num>) (%rem x)
+
+(def pow () #t)
+(def exp () #t)
+
+(def sqrt (x|<num>) (%sqrt x))
+
+(def positive? (x|<num>) (>= x 0))
+(def zero? (x|<num>) (= x 0))
+(def negative? (x|<num>) (< x 0))
+
+(def neg (x|<num>) (%neg x))
+(def abs (x|<num>) (%abs x))
+
+(def num-to-string-base () #t)
+
+(def num-to-string (n|<num>) (%number->string n))
+(def string-to-num (n|<num>) (%string->number n))
+
+(def $e 2.71)
+(def $pi 3.141592654)
+
+(def log (x|<num>) (%log x))
+
+(def logn (x|<num>) (%logn x))
+
+(def sin (x|<num>) (%sin x))
+(def cos (x|<num>) (%cos x))
+(def tan (x|<num>) (%tan x))
+
+(def asin (x|<num>) (%asin x))
+(def acos (x|<num>) (%acos x))
+(def atan (x|<num>) (%atan x))
+(def atan2 (x|<num> y|<num>) (%atan2 x y))
+
+(def sinh (x|<num>) (%sinh x))
+(def cosh (x|<num>) (%cosh x))
+(def tanh (x|<num>) (%tanh x))
+
+(def bit-or () #t)
+(def bit-and () #t)
+(def bit-xor () #t)
+
+(def bit? () #t)
+
+(def even? (n|<num>) (= 0 (mod n 2)))
+(def odd? (n|<num>) (= 1 (mod n 2)))
+
+(def gcd () #t)
+(def lcm () #t)
+(def << () #t)
+(def >> () #t)
+(def >>> () #t)
+
+(def float-bits (x|<float>) x)
+
+(def as (type|(t= <num>) x|<string>) (%string->number x))
+(def as (type|(t= <string>) x|<num>) (%number->string x))
+
+(def as (type|(t= <string) x|<symbol>) (%symbol->string x))
+(def as (type|(t= <symbol>) x|<string>) (%string->symbol x))

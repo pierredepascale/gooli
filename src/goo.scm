@@ -44,7 +44,7 @@
 	  (if (file-exists? filename)
 	      filename
 	      (lp (cdr paths)))))))
-      
+
 (define (ev-goo-use exp env)
   (let* ((name (cadr exp))
          (module (find-module name)))
@@ -83,11 +83,27 @@
 
 ;;; class
 
+(define (ev-goo-class-prop name prop env)
+  (let* ((prop-name (car prop))
+	 (prop-type (cadr prop))
+	 (prop-init (caddr prop))
+	 (prop-getter (cadddr prop))
+	 (prop-setter (setter-name prop-getter)))
+    (ev-goo-def `(def ,prop-getter-name ((obj name)) (%record-ref obj ',prop-name))
+		env)
+    (ev-goo-def `(def ,prop-setter-name ((obj name) (value ,prop-type))
+		      (%record-set obj ',prop-name value))
+		env)))
+
+(define (ev-goo-class-props name props env)
+  (for-each (lambda (p) (ev-goo-class-prop name p env)) props))
+
 (define (ev-goo-class exp env)
   (let ((name (cadr exp))
         (supers (map (lambda (e) (ev-goo e env)) (caddr exp)))
         (props (cadddr exp)))
-    (bind-global! name (create-class name supers props))))
+    (bind-global! name (create-class name supers props))
+    (ev-goo-class-props name props env)))
 
 ;;; macro
 
@@ -95,7 +111,7 @@
   (let ((name (cadr exp))
         (args (caddr exp))
         (code (cdddr exp)))
-    (bind-global! name (make-macro name (make-method name args (list :list) env code)))))
+    (bind-global! name (make-macro name (make-method name args (list :list) #f #f env code)))))
 
 ;;; literal
 
@@ -122,11 +138,14 @@
 (define (env-module env) (car env))
 (define (env-bindings env) (cdr env))
 
+(define (lookup-defined var module)
+  (assq var (module-defined module)))
+
 (define (lookup var env)
   (let ((entry (assq var (env-bindings env))))
     (if entry
         (cdr entry)
-        (let ((entry (assq var (module-defined (env-module env)))))
+        (let ((entry (lookup-defined var (env-module env))))
           (if entry
               (cdr entry)
 	      (let ((entry (lookup-exported var (env-module env))))
@@ -186,7 +205,8 @@
   ;(display ";; lookup exported name ") (display name) (display (module-name module))
   ;(newline)
   (and (memq name (module-export module))
-       (assq name (module-defined module))))
+       (or (assq name (module-defined module))
+	   (lookup-exported name module))))
 
 (define *runtime-sig*
   '(<any> <type> <class> <union> <singleton> <subclass>
@@ -249,6 +269,8 @@
                                    (map car formals/exp)
                                    (map (lambda (t) (ev-goo (cadr t) env))
                                         formals/exp)
+				   #f
+				   #f
                                    env
                                    (cdddr exp))))
           (bind-def! (env-module env) name method)))))
@@ -287,14 +309,16 @@
 (define (macro-name m) (vector-ref m 1))
 (define (macro-expander m) (vector-ref m 2))
 
-(define (make-method name args specs env code)
-  (vector 'method name args specs env code))
+(define (make-method name args specs keys rest env code)
+  (vector 'method name args specs keys rest env code))
 (define (method? m) (and (vector? m) (eq? 'method (vector-ref m 0))))
 (define (method-name m) (vector-ref m 1))
 (define (method-args m) (vector-ref m 2))
 (define (method-specs m) (vector-ref m 3))
-(define (method-env m) (vector-ref m 4))
-(define (method-code m) (vector-ref m 5))
+(define (method-keys m) (vector-ref m 4))
+(define (method-rest m) (vextor-ref m 5))
+(define (method-env m) (vector-ref m 6))
+(define (method-code m) (vector-ref m 7))
 
 (define (make-generic name args methods)
   (vector 'generic name args methods))
@@ -313,21 +337,31 @@
 (define (method-arg-specs args)
   (map (lambda (a) (if (pair? a) (cadr a) '<any>)) args))
 
+(define (ev-goo-sig args)
+  (
+  (let lp ((names '())
+	   (specs '())
+	   (keys '())
+	   (
 (define (ev-goo-fun exp env)
   (let* ((args (cadr exp))
          (names (method-arg-names args))
          (specs (method-arg-specs args)))
     (make-method 'anonymous names
                (map (lambda (e) (ev-goo e env)) specs)
+	       #f
+	       #f
                env (cddr exp))))
 
 (define (apply-method method args)
   (let ((names (method-args method))
         (code (method-code method))
         (env (method-env method)))
-    (if (procedure? code)
-        (apply code args)
-        (ev-goo-seq code (bind-variables names args env)))))
+    (if (method-applicable? method args)
+	(if (procedure? code)
+	    (apply code args)
+	    (ev-goo-seq code (bind-variables names args env)))
+	(error "method ~a not applicable to ~a" method args))))
 
 (define (ev-goo-app-method fun args types env)
   (apply-method fun args))
@@ -450,8 +484,7 @@
 
 (define (subtype? t1 t2)
   (cond ((and (class? t1) (class? t2))
-	 (or (eq? t1 t2)
-	     (if (memq t2 (class-supers t1)) #t #f)))
+	 (or (eq? t1 t2) (if (memq t2 (class-supers t1)) #t #f)))
 	((or (singleton? t2) (singleton? t1)) (eq? t1 t2))
 	((union? t2) (some? (lambda (t) (subtype? t1 t2)) (union-types t2)))
 	((subclass? t2) (subtype? t1 (subclass-class t2)))
@@ -482,16 +515,44 @@
 
         (else (instance-class obj))))
 
-(define (make-instance class)
+(define (alloc-instance class)
   (let* ((size (length (class-props class))))
     (vector 'instance class (make-vector size #f))))
+
+(define (init-instance instance values)
+  (let lp ((vs values))
+    (if (null? vs)
+	init
+	(let* ((name (car vs))
+	       (value (cadr vs)))
+	  (instance-set! instance name value)
+	  (lp (cddr vs))))))
 
 (define (instance? i) (vector? i))
 (define (instance-class i) (vector-ref i 1))
 (define (instance-props i) (vector-ref i 2))
+(define (instance-ref i n)
+  (let ((offset (prop-offset (instance-class i) n)))
+    (vector-ref (instance-props i) offset)))
+(define (instance-set! i n v)
+  (let ((offset (prop-offset (instance-class i) n)))
+    (vector-set! (instance-props i) offset v)))
 
-(define (make-prop name type getter setter)
-  (vector 'prop name type getter setter))
+(define (make-prop name type init getter setter)
+  (vector 'prop name type init getter setter))
+(define (prop? obj) (and (vector? obj) (eq? (vector-ref obj 0) 'prop)))
+(define (prop-name p) (vector-ref p 1))
+(define (prop-type p) (vector-ref p 2))
+(define (prop-init p) (vector-ref p 3))
+(define (prop-getter p) (vector-ref p 4))
+(define (prop-setter p) (vector-ref p 5))
+
+(define (prop-offset class name)
+  (let lp ((i 0)
+	   (props (class-props class)))
+    (cond ((null? props) (error "property ~a not found in ~a" name class))
+	  ((eq? name (prop-name (car props))) i)
+	  (else (lp (+ i 1) (cdr props))))))
 
 ;;; runtime
 
@@ -531,6 +592,8 @@
      (bind-def! *goo-runtime* '?name (make-method '?name
 						  '(?arg ...)
 						  (list (ev-goo '?type (make-env *goo-runtime* '())) ...)
+						  #f
+						  #f
 						  #f (lambda (?arg ...) . ?body))))))
 
 (define-syntax boot
@@ -571,28 +634,27 @@
 
 ;;; types
 
-(def isa? ((x <any>) (y <type>)) (is? x y))
+(def %isa? ((x <any>) (y <type>)) (is? x y))
   
-(def subtype? ((x <type>) (y <type>)) (subtype? x y))
+(def %subtype? ((x <type>) (y <type>)) (subtype? x y))
 
 ;(def make ((type <type>) (args <any>)) (error "cannot MAKE type"))
-     
 
-(def t= ((x <any>)) (make-singleton x))
+;(def t= ((x <any>)) (make-singleton x))
 
 ;; (def <subclass>
 
 (def t< ((class <class>)) (make-subclass class))
 
-(def type-class ((x <subclass>)) (subclass-class x))
+;(def type-class ((x <subclass>)) (subclass-class x))
 
 ;; (def <union>
 
-(def t+ ((x <type>) (y <type>)) (make-union (list x y)))
+;(def t+ ((x <type>) (y <type>)) (make-union (list x y)))
 
 ;(def union-elts ((x <union>)) (union-types x))
 
-(def t? ((type <type>)) (make-union (make-singleton #f) type))
+;(def t? ((type <type>)) (make-union (make-singleton #f) type))
 
 ;; (def <product>
 
@@ -608,9 +670,9 @@
 
 ;; (def class-ancestors ((x <class>)
 
-;(def class-direct-props ((x <class>)) (class-direct-props x))
+(def class-direct-props ((x <class>)) (class-direct-props x))
 
-;(def class-props ((x <class>)) (class-props x))
+(def class-props ((x <class>)) (class-props x))
 
 ;; (def class-children ((x <class>))
 
@@ -637,7 +699,7 @@
 ;; (def add-prop (owner (getter <gen>) (setter <gen>) (type <type>) (init <fun>))
 ;(def make ((x <any>) (args <list>)) (initialize (make-instance x)))
 
-;(def initialize ((x <any>)) x)
+;;(def initialize ((x <any>) args) x)
 
 ;; ;;; FUN
 
@@ -681,23 +743,23 @@
 
 ;(def as ((x <any>) (y <any>)) (error "as not defined"))
 
-;(def class-of ((x <any>)) (class-of x))
+(def class-of ((x <any>)) (class-of x))
 
-;(def == ((x <any>) (y <any>)) (eq? x y))
+(def == ((x <any>) (y <any>)) (eq? x y))
 
-;(def = ((x <any>) (y <any>)) (error "= not specialized"))
+(def = ((x <any>) (y <any>)) (error "= not specialized"))
 
 ;(def ~= ((x <any>) (y <any>)) (error "~= not speciliazed"))
 
-;(def ~== ((x <any>) (y <any>)) (not (eq? x y)))
+(def ~== ((x <any>) (y <any>)) (not (eq? x y)))
 
-;(def to-str ((x <any>)) "{any}")
+(def to-str ((x <any>)) "{any}")
 
 ;; ;;;
 
 ;; (def <bool>
 
-;(def not ((x <bool>)) (if x #f #t))
+(def not ((x <bool>)) (if x #f #t))
 
 ;; (def <magnitude>
 
@@ -1013,8 +1075,8 @@
 ;(def each ((op <fun>) (l <list>)) (for-each op l))
 ;(def zip ((op <fun>) (l1 <list>) (l2 <list>)) 0)
 
-(def as ((type (t= <list>)) (x <string>)) (string->list x))
-(def as ((type (t= <string>)) (x <list>)) (list->string x))
+;(def as ((type (t= <list>)) (x <string>)) (string->list x))
+;(def as ((type (t= <string>)) (x <list>)) (list->string x))
 
 ;(def as ((type (t= <vector>)) (x <list>)) (list->vector x))
 ;(def as ((type (t= <list>)) (x <vector>)) (vector->list x))
