@@ -316,7 +316,7 @@
 (define (method-args m) (vector-ref m 2))
 (define (method-specs m) (vector-ref m 3))
 (define (method-keys m) (vector-ref m 4))
-(define (method-rest m) (vextor-ref m 5))
+(define (method-rest m) (vector-ref m 5))
 (define (method-env m) (vector-ref m 6))
 (define (method-code m) (vector-ref m 7))
 
@@ -332,30 +332,105 @@
   (vector-set! g 3 (cons m (generic-methods g))))
 
 (define (method-arg-names args)
-  (map (lambda (a) (if (pair? a) (car a) a)) args))
+  (let lp ((args args))
+    (cond ((null? args) args)
+	  ((eq? (car args) '&rest) '())
+	  ((eq? (car args) '&key) '())
+	  (else (let ((a (car args)))
+		  (cons (if (pair? a) (car a) a) (lp (cdr args))))))))
 
 (define (method-arg-specs args)
-  (map (lambda (a) (if (pair? a) (cadr a) '<any>)) args))
+  (let lp ((args args))
+    (cond ((null? args) args)
+	  ((eq? (car args) '&rest) '())
+	  ((eq? (car args) '&key) '())
+	  (else (let ((a (car args)))
+		  (cons (if (pair? a) (cadr a) '<any>) (lp (cdr args))))))))
 
-(define (ev-goo-sig args)
-  (
-  (let lp ((names '())
-	   (specs '())
-	   (keys '())
-	   (
+(define (symbol->keyword sym)
+  (string->symbol (string-append ":" (symbol->string sym))))
+
+(define (method-arg-keys args)
+  (let ((keys (memq '&key args)))
+    (if keys
+	(let lp ((args (cdr keys))
+		 (keys '()))
+	  (cond ((null? args) keys)
+		((eq? '&rest (car args))
+		 keys)
+		((symbol? (car args))
+		 (lp (cdr args) (cons (symbol->keyword (car args)) keys)))
+		(else (error "bad key definition ~a in argument list"))))
+	#f)))
+
+(define (method-arg-rest args)
+  (let ((rest (memq '&rest args)))
+    (cond ((and rest (pair? (cdr rest)))
+	   (cadr rest))
+	  (rest (error "bad &rest argument definition ~a" args))
+	  (else #f))))
+
 (define (ev-goo-fun exp env)
   (let* ((args (cadr exp))
          (names (method-arg-names args))
-         (specs (method-arg-specs args)))
+         (specs (method-arg-specs args))
+	 (keys (method-arg-keys args))
+	 (rest (method-arg-rest args)))
+    (display (list 'args names specs keys rest)) (newline)
     (make-method 'anonymous names
                (map (lambda (e) (ev-goo e env)) specs)
-	       #f
-	       #f
+	       keys
+	       rest
                env (cddr exp))))
+
+(define (key-ref key args)
+  (cond ((null? args) #f)
+	((and (pair? args) (pair? (cdr args)) (eq? key (car args)))
+	 (cadr args))
+	(else (key-ref key (cddr args)))))
+
+(define (keyword->symbol keyword)
+  (let ((str (symbol->string keyword)))
+    (string->symbol (substring str 1 (string-length str)))))
+
+(define (bind-arguments-rest-and-keys args env keys rest)
+  (let ((env* (if rest
+		  (bind-variable rest (list->vector args) env)
+		  env)))
+    (if keys
+	(let lp ((env env*)
+		 (keys keys))
+	  (if (null? keys)
+	      env
+	      (let ((key (car keys)))
+		(lp (bind-variable (keyword->symbol key)
+				   (key-ref key args)
+				   env)
+		    (cdr keys)))))
+	env*)))
+
+(define (bind-arguments args env names keys rest)
+  (cond ((and (null? args) (null? names))
+	 (if (or rest keys)
+	     (bind-arguments-rest-and-keys args env keys rest)
+	     env))
+	((null? args) (error "too few arguments"))
+	((null? names)
+	 (if (or rest keys)
+	     (bind-arguments-rest-and-keys args env keys rest)
+	     (error "too many arguments")))
+	(else (bind-arguments (cdr args)
+			      (bind-variable (car names)
+					     (car args)
+					     env)
+			      (cdr names)
+			      keys rest))))
 
 (define (apply-method method args)
   (let ((names (method-args method))
         (code (method-code method))
+	(keys (method-keys method))
+	(rest (method-rest method))
         (env (method-env method)))
     (if (method-applicable? method args)
 	(if (procedure? code)
@@ -1118,7 +1193,7 @@
 
 (define (char-symbol-initial? ch)
   (or (char-alphabetic? ch)
-      (memq ch '(#\: #\+ #\= #\* #\% #\< #\> #\? #\^))))
+      (memq ch '(#\& #\: #\+ #\= #\* #\% #\< #\> #\? #\^))))
 
 (define (char-symbol-consequent? ch)
   (or (char-symbol-initial? ch)
