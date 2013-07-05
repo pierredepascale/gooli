@@ -1,27 +1,28 @@
 ;;; type.gooli
 
 (def isa? (x|<any> y|<type>)
-  (%is? x y))
+  (%isa? x y))
 
 (def subtype? (x|<type> y|<type>)
-  (%subtype x y))
+  (%subtype? x y))
 
 (def make (type|<type> &rest args)
   (let ((instance (%alloc-instance type)))
-    (initialize instance args)))
+    (apply initialize instance args)
+    instance))
 
 (def init (instance|<any> args)
   instance)
 
-(def t= (x|<any>) (%make-singleton x))
+(def t= (x|<any>) (%t= x))
 
-(def t< (class|<class>) (make-subclass class))
+(def t< (class|<class>) (%t< class))
 
 (def type-class (x|<subclass>) (%subclass-class x))
 
-(def t+ (x|<type> y|<type>) (%make-union x y))
+(def t+ (x|<type> y|<type>) (%t+ x y))
 
-(def t? (type|<type>) (%make-union (make-singleton #f) type))
+(def t? (type|<type>) (%t+ (%t= #f) type))
 
 (def class-name (x |<class>) (%class-name x))
 

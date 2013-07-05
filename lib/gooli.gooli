@@ -1,0 +1,45 @@
+(use
+ runtime/type
+ runtime/char
+ runtime/collection
+ runtime/condition
+ runtime/fun
+ runtime/io
+ runtime/scalar
+ runtime/string	
+ runtime/tables
+ runtime/vector
+)
+
+(export 
+ ;; type.gooli
+ isa? subtype? make init
+ t=
+ t< type-class
+ t+
+ t?
+ class-name class-parents class-direct-props class-props
+ prop-owner prop-getter prop-type prop-init prop-bound?
+
+ ;; scalar.gooli
+
+ ;; char.gooli
+ alpha? digit? lower? upper? to-digit to-lower to-upper
+
+ ;; collection.gooli
+
+ ;; condition.gooli
+
+ ;; fun.gooli
+
+ ;; io.gooli
+
+
+ ;; string.gooli
+
+ ;; table.gooli
+
+ ;; vector.gooli
+
+
+)

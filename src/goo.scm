@@ -213,11 +213,10 @@
           <magnitude> <num> <int> <float> <bool> <char>
           <string> <symbol> <list> <pair> <nil> <fun>
           <method> <generic> <input-port> <output-port>
-          isa? subtype? make t= t< type-class t+ union-elts t?
-          class-name class-parents class-direct-props class-props
-          initialize
+          %isa? %subtype? %alloc-instance make %t= %t< %type-class %t+ union-elts %t?
+          %class-name %class-parents %class-direct-props %class-props
           fun-name fun-methods generic-add-method!
-          sorted-application-methods method-applicable?
+          sorted-application-methods %method-applicable?
           as class-of == = ~= ~== to-str
           not < > <= >= max min
           alpha? digit? lower? upper? + - * / round floor ceil trunc mod  div rem
@@ -265,15 +264,12 @@
         (formals/exp (caddr exp)))
     (if (null? (cdddr exp))
         (bind-def! (env-module env) name (ev-goo formals/exp (bind-variable name #f env)))
-        (let ((method (make-method name
-                                   (map car formals/exp)
-                                   (map (lambda (t) (ev-goo (cadr t) env))
-                                        formals/exp)
-				   #f
-				   #f
-                                   env
-                                   (cdddr exp))))
-          (bind-def! (env-module env) name method)))))
+        (let ((method (ev-goo-fun `(fun ,formals/exp
+					,@(cdddr exp))
+				  env)))
+	  (set-method-name! method name)
+          (bind-def! (env-module env) name method)
+	  method))))
 
 ;;; binding form
 
@@ -313,6 +309,7 @@
   (vector 'method name args specs keys rest env code))
 (define (method? m) (and (vector? m) (eq? 'method (vector-ref m 0))))
 (define (method-name m) (vector-ref m 1))
+(define (set-method-name! m n) (vector-set! m 1 n))
 (define (method-args m) (vector-ref m 2))
 (define (method-specs m) (vector-ref m 3))
 (define (method-keys m) (vector-ref m 4))
@@ -359,7 +356,9 @@
 		((eq? '&rest (car args))
 		 keys)
 		((symbol? (car args))
-		 (lp (cdr args) (cons (symbol->keyword (car args)) keys)))
+		 (lp (cdr args) (cons (cons (symbol->keyword (car args)) #f) keys)))
+		((and (pair? (car args)) (symbol? (caar args)))
+		 (lp (cdr args) (cons (cons (symbol->keyword (caar args)) (cadar args)) keys)))
 		(else (error "bad key definition ~a in argument list"))))
 	#f)))
 
@@ -376,15 +375,15 @@
          (specs (method-arg-specs args))
 	 (keys (method-arg-keys args))
 	 (rest (method-arg-rest args)))
-    (display (list 'args names specs keys rest)) (newline)
+    ;(display (list 'args names specs keys rest)) (newline)
     (make-method 'anonymous names
                (map (lambda (e) (ev-goo e env)) specs)
 	       keys
 	       rest
                env (cddr exp))))
 
-(define (key-ref key args)
-  (cond ((null? args) #f)
+(define (key-ref key args default)
+  (cond ((null? args) default)
 	((and (pair? args) (pair? (cdr args)) (eq? key (car args)))
 	 (cadr args))
 	(else (key-ref key (cddr args)))))
@@ -403,8 +402,8 @@
 	  (if (null? keys)
 	      env
 	      (let ((key (car keys)))
-		(lp (bind-variable (keyword->symbol key)
-				   (key-ref key args)
+		(lp (bind-variable (keyword->symbol (car key))
+				   (key-ref (car key) args (cdr key))
 				   env)
 		    (cdr keys)))))
 	env*)))
@@ -435,7 +434,7 @@
     (if (method-applicable? method args)
 	(if (procedure? code)
 	    (apply code args)
-	    (ev-goo-seq code (bind-variables names args env)))
+	    (ev-goo-seq code (bind-arguments args env names keys rest)))
 	(error "method ~a not applicable to ~a" method args))))
 
 (define (ev-goo-app-method fun args types env)
@@ -557,10 +556,21 @@
 	((subclass? class) (and (is? obj <class>) (subtype? obj (subclass-class obj))))
 	(else #f)))
 
+(define (any? proc lst)
+  (if (null? lst)
+      #f
+      (or (proc (car lst))
+	  (any? proc (cdr lst)))))
+
+;;; TODO fixe bug with singleton
+(define (subtype-class? t1 t2)
+  (or (eq? t1 t2)
+      (any? (lambda (t) (subtype? t t2)) (class-supers t1))))
+
 (define (subtype? t1 t2)
-  (cond ((and (class? t1) (class? t2))
-	 (or (eq? t1 t2) (if (memq t2 (class-supers t1)) #t #f)))
-	((or (singleton? t2) (singleton? t1)) (eq? t1 t2))
+  (cond ((class? t2) (subtype-class? t1 t2))
+	((and (singleton? t2) (singleton? t1)) (eq? (singleton-value t1)
+						    (singleton-value t2)))
 	((union? t2) (some? (lambda (t) (subtype? t1 t2)) (union-types t2)))
 	((subclass? t2) (subtype? t1 (subclass-class t2)))
 	(else (error "unknown type relation" t1 t2))))
@@ -592,7 +602,7 @@
 
 (define (alloc-instance class)
   (let* ((size (length (class-props class))))
-    (vector 'instance class (make-vector size #f))))
+    (make-instance class (make-vector size #f))))
 
 (define (init-instance instance values)
   (let lp ((vs values))
@@ -603,7 +613,8 @@
 	  (instance-set! instance name value)
 	  (lp (cddr vs))))))
 
-(define (instance? i) (vector? i))
+(define (make-instance class props) (vector 'instance class props))
+(define (instance? i) (and (vector? i) (eq? 'instance (vector-ref i 0))))
 (define (instance-class i) (vector-ref i 1))
 (define (instance-props i) (vector-ref i 2))
 (define (instance-ref i n)
@@ -715,21 +726,21 @@
 
 ;(def make ((type <type>) (args <any>)) (error "cannot MAKE type"))
 
-;(def t= ((x <any>)) (make-singleton x))
+(def %t= ((x <any>)) (make-singleton x))
 
 ;; (def <subclass>
 
-(def t< ((class <class>)) (make-subclass class))
+(def %t< ((class <class>)) (make-subclass class))
 
-;(def type-class ((x <subclass>)) (subclass-class x))
+(def %type-class ((x <subclass>)) (subclass-class x))
 
 ;; (def <union>
 
-;(def t+ ((x <type>) (y <type>)) (make-union (list x y)))
+(def %t+ ((x <type>) (y <type>)) (make-union (list x y)))
 
 ;(def union-elts ((x <union>)) (union-types x))
 
-;(def t? ((type <type>)) (make-union (make-singleton #f) type))
+(def %t? ((type <type>)) (make-union (make-singleton #f) type))
 
 ;; (def <product>
 
@@ -739,15 +750,16 @@
 
 ;; (def <class>
 
-(def class-name ((x <class>)) (class-name x))
+(def %alloc-instance ((x <class>)) (alloc-instance x))
+(def %class-name ((x <class>)) (class-name x))
 
-(def class-parents ((x <class>)) (class-supers x))
+(def %class-parents ((x <class>)) (class-supers x))
 
 ;; (def class-ancestors ((x <class>)
 
-(def class-direct-props ((x <class>)) (class-direct-props x))
+(def %class-direct-props ((x <class>)) (class-direct-props x))
 
-(def class-props ((x <class>)) (class-props x))
+(def %class-props ((x <class>)) (class-props x))
 
 ;; (def class-children ((x <class>))
 
@@ -809,8 +821,8 @@
 
 ;; (def <method>
 
-;(def method-applicable? ((x <method>) (args <any>))
-;  (method-applicable? x args))
+(def method-applicable? ((x <method>) (args <any>))
+  (method-applicable? x args))
 
 ;; (def sup
 
