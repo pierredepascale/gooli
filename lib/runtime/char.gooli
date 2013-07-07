@@ -1,5 +1,7 @@
 ;;; char.gooli -- character procedure
 
+(use runtime/scalar)
+
 (def alpha? (ch|<char>)
   (let ((code (as <int> ch)))
     (or (and (<= (as <int> #\a) code) (<= code (as <int> #\z)))
@@ -42,3 +44,7 @@
 
 (def as (type|(t= <int>) ch|<char>)
   (%char->int ch))
+
+(export alpha?
+	digit? lower? upper?
+	to-digit to-lower to-upper)

@@ -215,23 +215,29 @@
           <method> <generic> <input-port> <output-port>
           %isa? %subtype? %alloc-instance make %t= %t< %type-class %t+ union-elts %t?
           %class-name %class-parents %class-direct-props %class-props
-          fun-name fun-methods generic-add-method!
-          sorted-application-methods %method-applicable?
+
+          %fun-name %fun-specs %fun-nary? %fun-arity %apply
+	  %fun-methods
+	  %generic-add-method! %sorted-application-methods %method-applicable?
+	  %sup
+
           as class-of == = ~= ~== to-str
           not < > <= >= max min
           alpha? digit? lower? upper? + - * / round floor ceil trunc mod  div rem
           sqrt log positive? zero? negative? neg abs
           num-to-string string-to-num $e $pi sin cos tan asin acos atan atan2
           even? odd?
+
           eof-object? current-input-port get gets peek
           current-output-port put newline read
-          pair head tail empty? member? delete ++ reduce fold-right
+          empty? member? delete ++ reduce fold-right
           fold-left map each zip
 
           %pair %head %tail
+          %vector-ref %vector-set!
+
           %int->char %char->int %read %write
           %open-input-file %open-output-file
-          %vector-ref %vector-set!
 
 	  %dbg
           ))
@@ -720,46 +726,7 @@
 
 ;;; types
 
-(def %isa? ((x <any>) (y <type>)) (is? x y))
-  
-(def %subtype? ((x <type>) (y <type>)) (subtype? x y))
-
 ;(def make ((type <type>) (args <any>)) (error "cannot MAKE type"))
-
-(def %t= ((x <any>)) (make-singleton x))
-
-;; (def <subclass>
-
-(def %t< ((class <class>)) (make-subclass class))
-
-(def %type-class ((x <subclass>)) (subclass-class x))
-
-;; (def <union>
-
-(def %t+ ((x <type>) (y <type>)) (make-union (list x y)))
-
-;(def union-elts ((x <union>)) (union-types x))
-
-(def %t? ((type <type>)) (make-union (make-singleton #f) type))
-
-;; (def <product>
-
-;; (def t*
-
-;; (def product-elts ((x <product>))
-
-;; (def <class>
-
-(def %alloc-instance ((x <class>)) (alloc-instance x))
-(def %class-name ((x <class>)) (class-name x))
-
-(def %class-parents ((x <class>)) (class-supers x))
-
-;; (def class-ancestors ((x <class>)
-
-(def %class-direct-props ((x <class>)) (class-direct-props x))
-
-(def %class-props ((x <class>)) (class-props x))
 
 ;; (def class-children ((x <class>))
 
@@ -1178,18 +1145,77 @@
 
 ;;; primitive
 
-(def %pair ((h <any>) (t <any>)) (cons h t))
-(def %head ((p <pair>)) (car p))
-(def %tail ((p <pair>)) (cdr p))
+;; type -- primitives
+(def %isa? ((x <any>) (y <type>)) (is? x y))
+(def %subtype? ((x <type>) (y <type>)) (subtype? x y))
+(def %t= ((x <any>)) (make-singleton x))
 
+;; (def <subclass>
+
+(def %t< ((class <class>)) (make-subclass class))
+
+(def %type-class ((x <subclass>)) (subclass-class x))
+
+;; (def <union>
+
+(def %t+ ((x <type>) (y <type>)) (make-union (list x y)))
+
+;(def union-elts ((x <union>)) (union-types x))
+
+(def %t? ((type <type>)) (make-union (make-singleton #f) type))
+
+;; (def <product>
+
+;; (def t*
+
+;; (def product-elts ((x <product>))
+
+;; (def <class>
+
+(def %alloc-instance ((x <class>)) (alloc-instance x))
+(def %class-name ((x <class>)) (class-name x))
+
+(def %class-parents ((x <class>)) (class-supers x))
+
+;; (def class-ancestors ((x <class>)
+
+(def %class-direct-props ((x <class>)) (class-direct-props x))
+
+(def %class-props ((x <class>)) (class-props x))
+
+
+
+;; fun -- primitives
+(def %fun-name ((x <fun>)) (fun-name x))
+(def %fun-specs ((x <fun>)) (fun-specs x))
+(def %fun-nary? ((x <fun>)) (fun-nary? x))
+(def %fun-arity ((x <fun>)) (fun-arity x))
+(def %apply ((f <fun>) (args <any>)) (apply f args))
+(def %fun-methods ((x <generic>)) (fun-methods x))
+
+(def %generic-add-method! ((x <generic>) (y <method>)) (generic-add-method! x y))
+(def %sorted-applicable-methods ((x <generic>) (args <any>)) (sorted-applicable-methods x args))
+(def %method-applicable? ((x <method>) args) (method-applicable x args))
+
+(def %sup () (error "SUP not implemented"))
+
+;; char -- primitives
 (def %int->char ((ch <int>)) (integer->char ch))
 (def %char->int ((ch <char>)) (char->integer ch))
 
+;; io -- primitives
 (def %dbg ((o <any>)) (write o))
 (def %read ((p <input-port>)) (read-goo p))
 (def %write ((p <output-port>) (o <any>)) (write o p))
 (def %open-input-file ((fn <string>)) (open-output-file fn))
 (def %open-output-file ((fn <string>)) (open-input-file fn))
+
+;; collection -- primitives
+
+(def %pair ((h <any>) (t <any>)) (cons h t))
+(def %head ((p <pair>)) (car p))
+(def %tail ((p <pair>)) (cdr p))
+
 (def %vector-ref ((v <vector>) (i <int>)) (vector-ref v i))
 (def %vector-set! ((v <vector>) (i <int>) (o <any>)) (vector-set! v i o))
 

@@ -31,6 +31,13 @@
  ;; condition.gooli
 
  ;; fun.gooli
+ fun-name fun-specs fun-nary? fun-arity
+ apply
+ fun-methods
+ generic-add-method!
+ sorted-applicable-methods
+ method-applicable?
+ sup
 
  ;; io.gooli
 

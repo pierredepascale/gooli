@@ -1,5 +1,7 @@
 ;;; type.gooli
 
+(use primitives)
+
 (def isa? (x|<any> y|<type>)
   (%isa? x y))
 
@@ -44,10 +46,18 @@
 
 (def prop-bound? (x gen|<generic>) (error ""))
 
+;; TODO error is not defined here ?!?
+(def as (x|<type> obj|<any>)
+  (if (%isa? obj x)
+      x
+      (error "Cannot coerce ~a to ~a" obj x)))
+
 (export isa? subtype? make init
-        t=
-        t< type-class
-        t+
+	<type>
+        <singleton> t=
+        <subclass> t< type-class
+        <union> t+
+	<class>
         t?
         class-name class-parents class-direct-props class-props
         prop-owner prop-getter prop-type prop-init prop-bound?)
