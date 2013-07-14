@@ -1,11 +1,13 @@
 ;;; condition.gooli -- condition definition
 
+(use primtives)
+
 (defclass <condition> ())
 
 (def default-handler-description (c|<condition>) "No description")
 (def default-handler (c|<condition>))
 
-(def signal (c|<condition> args|<any>))
+(def sig (c|<condition> &rest args))
 
 (defclass <simple-condition> (<condition>)
   (condition-message <any> "")
@@ -15,8 +17,8 @@
 
 (defclass <error> (<serious-condition>))
 
-(def error (c|<error> args|<list>))
-(def error (s|<string> args|<list>))
+(def error (c|<any> &rest args)
+(def error (s|<string> &rest args)
 
 (defclass <simple-error> (<error> <simple-condition>))
 
@@ -30,3 +32,106 @@
 (def handler-matches? (x|<handler> c|<condition>))
 
 (defmacro try (e) 'error)
+
+(defclass <arithmetic-error> (<error>))
+(defclass <stack-overflow-error> (<error>))
+(defclass <keyboard-interrupt> (<error>))
+(defclass <internal-error> (<simple-error>))
+
+(defclass <assert-error> (<simple-error>))
+(defclass <unbound-error> (<error>))
+(defclass <unbound-variable-error> (<unbound-error>)
+  ((unbound-variable-error-variable <any> #f)))
+
+(defclass <property-error> (<error>)
+  ((property-error-generic <any> #f)
+   (property-error-owner <any> #f))
+
+(defclass <property-unbound-error> (<property-error> <type-error>))
+(defclass <property-not-found-error> (<property-error>))
+
+(defclass <type-error> (<error>)
+  ((type-error-value <any> #f)
+   (type-error-type <any>  #f)))
+
+(defclass <as-error> (<type-error>))
+(defclass <range-error> (<error>)
+  ((range-error-collection <col> #f)
+   (range-error-key <any> #f)))
+
+(defclass <call-error> (<error>)
+  ((call-error-function <fun> #f)
+   (call-error-arguments <col> #f)))
+
+(defclass <arity-error> (<call-error>))
+(defclass <narity-error> (<arity-error>))
+(defclass <unknown-function-error> (<call-error>))
+(defclass <argument-type-error> (<type-error> <call-error>))
+
+(defclass <return-type-error> (<type-error> <call-error>))
+
+(defclass <ambiguous-method-error> (<call-error>))
+(defclass <no-applicable-methods-error> (<call-error>))
+(defclass <no-next-methods-error> (<call-error>))
+(defclass <incongruent-method-error> (<error>)
+  ((incongruent-method-error-generic <gen> #f)
+   (incongruent-method-error-method <met> #f)))
+
+(defclass <cpl-error> (<error>))
+(defclass <io-error> (<error>))
+
+(defclass <file-opening-error> (<io-error>)
+  ((file-opening-error-filename <str> "")))
+
+(defclass <directory-error> (<file-opening-error>))
+(defclass <compiler-error> (<error>))
+(defclass <syntax-error> (<error>))
+(defclass <macro-error> (<error>))
+(defclass <namespace-error> (<compiler-error> <simple-error>))
+
+(export <condition>
+	default-handler default-handler-desription
+	sig
+	<simple-condition>
+	condition-message condition-arguments
+	<serious-condition>
+	<error>
+	error
+	<simple-error>
+	<restart>
+	<handler>
+	handler-function
+	make-handler
+	handler-matches
+	try
+	<arithmetic-error> <stack-overflow-error> <keyboard-interrupt>
+	<internal-error> <assert-error>
+	<unbound-error> <unbound-variable-error>
+	unbound-variable-error-variable
+	<property-error>
+	property-error-generic property-error-owner
+	<property-unbound-error>
+	<property-not-found-error>
+	<type-error>
+	type-error-value type-error-type
+	<as-error>
+	<range-error> 
+	range-error-collection
+	range-error-key
+	<call-error> call-error-function call-error-arguments <atity
+	<arity-error>
+	<narity-error>
+	<unknown-function-error>
+	<argument-type-error>
+	<return-type-error>
+	<ambiguous-method-error> <no-applicable-methods-error> <no-next-methods-error>
+	<incongruent-method-error> <cpl-error> 
+	<io-error> 
+	<file-opening-error>
+	file-opening-error-filename
+	<directory-error>
+	<compiler-error>
+	<syntax-error>
+	<macro-error>
+	<namespace-error>
+)

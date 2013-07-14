@@ -1,0 +1,18 @@
+;; enum.gooli -- enumerator
+
+(use primitive)
+
+(defclass <enum> ())
+
+(def enum (x|<any>)) x)
+(def fin?
+(def nxt
+(def now
+(def now-setter
+(def now-key
+(def enum (x|<enum>) x)
+
+(defmacro for (e) e)
+
+(export <enum>
+	enum fin? nxt now now-setter now-key)

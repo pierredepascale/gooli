@@ -1,34 +1,153 @@
-(use
- runtime/type
- runtime/char
- runtime/collection
- runtime/condition
- runtime/fun
- runtime/io
- runtime/scalar
- runtime/string	
- runtime/tables
- runtime/vector
-)
+(use runtime/type
+     runtime/condition
+     runtime/scalar
+     runtime/collection
+     runtime/fun
+     runtime/io
+     runtime/string	
+     runtime/tables
+     runtime/vector
+     )
 
 (export 
  ;; type.gooli
- isa? subtype? make init
- t=
- t< type-class
- t+
+ isa? subtype? class-of make init
+ <type>
+ <singleton> t=
+ <subclass> t< type-class
+ <union> t+
  t?
  class-name class-parents class-direct-props class-props
  prop-owner prop-getter prop-type prop-init prop-bound?
 
  ;; scalar.gooli
+ <any>
+ as == ~==
+ = ~=
+ 
+ 
+ to-str
+ 
+ ;; log
+ <log>
+ not
+ 
+ ;; mag
+ <mag>
+ < > <= >=
+ 
+ min max
+ 
+ ;; chr
+ <chr> alpha? digit? lower? upper? to-digit to-lower to-upper
+ 
+ ;; num
+ <num>
+ + - * /
+	
+ round round-to floor ceil trunc mod div rem
+ pow exp sqrt
+ pos? zero? neg? 
+ neg abs
+ num-to-str-base num-to-str str-to-num
+ $e $pi
+ log logn 
+ sin cos tan asin acos atan atan2
+ sinh cosh tanh
+ 
+ ;; int
+ <int>
+ | & ^ ~ bit?
+ even? odd?
+ gcd lcm
+ << >> >>>
 
- ;; char.gooli
- alpha? digit? lower? upper? to-digit to-lower to-upper
+ ;; flo
+ <flo>
+ flo-bits
 
  ;; collection.gooli
+<col>
+	fab col fabs len
+	col-res-type
+	nul? nul
+	key-test key-type elt-type
+	elt elt-or
+	mem?
+	add alts dup keys items del zap
+	fill any? find find-or all?
+	fold fold+ do map
+
+	<col!>
+	elt-setter
+	into elt! fill! add! del! zap!
+
+ ;; sequence.gooli
+<seq>
+	1st 2nd 3rd
+	last pos finds
+	add push pop rev cat sub sub* ins
+	del-dups del-vals sort-by sort pick
+	prefix? suffix? repeat split join
+	
+	<seq!>
+	rev! cat! add! push! pop! ins!
+	sub-setter sub*-setter del-vals! del-dups! sort-by! sort!
+
+ ;; enum.gooli
+<enum>
+	enum fin? nxt now now-setter now-key
+
+ ;; map.gooli
+<map> <tab> tab-growth-factor tab-growth-threshold
+	tab-hash id-hash
+
+ ;; list.gooli
+head tail lst list lst* pair
 
  ;; condition.gooli
+        <condition>
+	default-handler default-handler-desription
+	sig
+	<simple-condition>
+	condition-message condition-arguments
+	<serious-condition>
+	<error>
+	error
+	<simple-error>
+	<restart>
+	<handler>
+	handler-function
+	make-handler
+	handler-matches
+	try
+	<arithmetic-error> <stack-overflow-error> <keyboard-interrupt>
+	<internal-error> <assert-error>
+	<unbound-error> <unbound-variable-error>
+	unbound-variable-error-variable
+	<property-error>
+	property-error-generic property-error-owner
+	<property-unbound-error>
+	<property-not-found-error>
+	<type-error>
+	type-error-value type-error-type
+	<as-error> <range-error> 
+	<call-error> call-error-function call-error-arguments <atity
+	<arity-error>
+	<narity-error>
+	<unknown-function-error>
+	<argument-type-error>
+	<return-type-error>
+	<ambiguous-method-error> <no-applicable-methods-error> <no-next-methods-error>
+	<incongruent-method-error> <cpl-error> 
+	<io-error> 
+	<file-opening-error>
+	file-opening-error-filename
+	<directory-error>
+	<compiler-error>
+	<syntax-error>
+	<macro-error>
+	<namespace-error>
 
  ;; fun.gooli
  fun-name fun-specs fun-nary? fun-arity
@@ -43,6 +162,9 @@
 
 
  ;; string.gooli
+
+ str case-insensitive-string-hash
+ case-ensisitive-equal
 
  ;; table.gooli
 

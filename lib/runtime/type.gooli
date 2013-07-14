@@ -8,6 +8,8 @@
 (def subtype? (x|<type> y|<type>)
   (%subtype? x y))
 
+(def class-of (x|<any>) (%class-of x))
+
 (def make (type|<type> &rest args)
   (let ((instance (%alloc-instance type)))
     (apply initialize instance args)
@@ -52,7 +54,7 @@
       x
       (error "Cannot coerce ~a to ~a" obj x)))
 
-(export isa? subtype? make init
+(export isa? subtype? class-of make init
 	<type>
         <singleton> t=
         <subclass> t< type-class

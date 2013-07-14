@@ -1,0 +1,12 @@
+;;; map.gooli -- map are collection with explicit keys
+
+(use runtime/collection
+     primitive)
+
+(def tab-growth-factor (x|<tab>) 1)
+(def tab-growth-threshold (x|<tab>) 1)
+(def tab-hash (x|<tab>))
+(def id-hash (x|<tab>))
+
+(export <map> <tab> tab-growth-factor tab-growth-threshold
+	tab-hash id-hash)

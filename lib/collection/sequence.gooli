@@ -1,0 +1,55 @@
+;;; sequences.gooli
+
+(use primitive)
+
+(def 1st (x|<seq>))
+(def 2nd (x|<seq>))
+(def 3rd (x|<seq>))
+(def last (x|<seq>) (elt x (len x)))
+(def pos (x|<seq> v|<any>) (and (mem? x v) (find x v)))
+(def finds (x|<seq> y|<seq>) #f)
+
+(def add (x|<seq> y|<any>))
+(def push (x|<seq> y|<any>)
+(def pop (x|<seq>) x)
+(def rev (x|<seq>) x)
+(def cat (x|<seq> &rest more) x)
+(def sub (x|<seq> from|<int> below|<int>) x)
+(def sub* (x|<seq> from|<int>) (sub x from (len x)))
+(def ins (x|<seq> i|<int>)
+(def del-dups (x|<seq>) x)
+(def del-vals (s|<seq> val) s)
+(def sort-by (s|<seq> f|<fun>) s)
+(def sort (s|<seq>) s)
+(def pick (f|<fun> x|<seq>) x)
+(def prefix? (x|<seq> prefix|<seq>) #f)
+(def suffix? (x|<seq> suffix|<seq>) #f)
+(def repeat (x|<seq> n|<int>) x)
+(def split (x|<seq> sep|<any>) x)
+(def join (xs|<seq> sep|<seq>) xs)
+
+(def rev! (x|<seq!>) x)
+(def cat! (x|<seq!> &rest more) x)
+(def add! (x|<seq!> y|<any>) x)
+(def push! (x|<seq!> y|<any>) x)
+(def pop! (x|<seq!>) x)
+
+(def ins! (x|<seq!> v|<any> i|<int>) x)
+(def sub-setter (dst|<seq!> src|<seq> from|<int> below|<int>) dst)
+(def sub*-setter (dst|<seq!> src|<seq> from|<int>) dst)
+
+(def del-vals! (x|<seq!> v|<any>) x)
+(def del-dups! (x|<seq!>) x)
+(def sort-by! (s|<seq!> f|<fun>) s)
+(def sort! (s|<seq!>) (sort-by! s <))
+
+(export <seq>
+	1st 2nd 3rd
+	last pos finds
+	add push pop rev cat sub sub* ins
+	del-dups del-vals sort-by sort pick
+	prefix? suffix? repeat split join
+	
+	<seq!>
+	rev! cat! add! push! pop! ins!
+	sub-setter sub*-setter del-vals! del-dups! sort-by! sort!)

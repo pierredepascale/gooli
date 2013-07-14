@@ -1,5 +1,8 @@
 ;;; scalar.gooli --
 
+(use primitives)
+
+;; any
 (def as (x|<type> y|<any>)
   (if (isa? x y)
       x
@@ -7,8 +10,7 @@
 
 (def == (x|<any> y|<any>) (%eq? x y))
 
-(def = (x|<any> y|<any>)
-  (error "no = method defined"))
+(def = (x|<any> y|<any>) (== x y)
 
 (def ~= (x|<any> y|<any>) (if (= x y) #f #t))
 
@@ -16,15 +18,63 @@
 
 (def to-str (x|<any>) "{any}")
 
+;; boolean
+
 (def not (x|<bool>) (if x #f #t))
 
+;; magnitude
 (def < (x|<mag> y|<mag>) (error "< not implemented"))
 (def > (x|<mag> y|<mag>) (error "> not implemented"))
 (def <= (x|<mag> y|<mag>) (error "<= not implemented"))
 (def >= (x|<mag> y|<mag>) (error ">= not implemented"))
 
-(def max () #t)
-(def min () #t)
+(def max (x|<any> y|<any>) (if (< x y) y x))
+(def min (x|<any> y|<any>) (if (< x y) x y))
+
+;; char
+
+(def alpha? (ch|<char>)
+  (let ((code (as <int> ch)))
+    (or (and (<= (as <int> #\a) code) (<= code (as <int> #\z)))
+        (and (<= (as <int> #\A) code) (<= code (as <int> #\Z))))))
+
+(def digit? (ch|<char>)
+  (let ((code (as <int> ch)))
+    (and (<= (as <int> #\0) code) (<= code (as <int> #\9)))))
+
+(def lower? (ch|<char>)
+  (let ((code (as <int> ch)))
+    (and (<= (as <int> #\a) code) (<= code (as <int> #\z)))))
+
+(def upper? (ch|<char>)
+  (let ((code (as <int> ch)))
+    (and (<= (as <int> #\A) code) (<= code (as <int> #\Z)))))
+
+(def to-digit (ch|<char>)
+  (if (digit? ch)
+      (- (as <int> ch) (as <int> #\0))
+      (value-error "argument is not a digit character ~a" ch)))
+
+(def to-lower (ch|<char>)
+  (if (upper? ch)
+      (as <char> (+ (as <int> #\a) (- (as <int> ch) (as <int> #\A))))
+      ch))
+
+(def to-upper (ch|<char>) #\A)
+  (if (lower? ch)
+      (as <char> (+ (as <int> #\A) (- (as <int> ch) (as <int> #\a))))
+      ch))
+
+(def < (ch1|<char> ch2|<char>)
+  (< (as <int> code1) (as <int> code2)))
+
+(def = (ch1|<char> ch2|<char>) (= (as <int> ch1) (as <int> ch2)))
+
+(def as (type|(t= <char>) n|<int>)
+  (%int->char n))
+
+(def as (type|(t= <int>) ch|<char>)
+  (%char->int ch))
 
 ;; numbers
 
@@ -39,6 +89,7 @@
 (def <= (x|<num> y|<num>) (%<= x y))
 
 (def round (x|<num>) (%round x))
+(def round-to (x|<num> n |<int>) x)
 
 (def floor (x|<num>) (%floor x))
 (def ceil (x|<num>) (%ceil x)
@@ -47,34 +98,32 @@
 (def div (x|<num>) (%div x)
 (def rem (x|<num>) (%rem x)
 
-(def pow () #t)
-(def exp () #t)
+(def pow (x|<num> e|<num>) x)
+(def exp (x|<num>) x)
 
 (def sqrt (x|<num>) (%sqrt x))
 
-(def positive? (x|<num>) (>= x 0))
+(def pos? (x|<num>) (>= x 0))
 (def zero? (x|<num>) (= x 0))
-(def negative? (x|<num>) (< x 0))
+(def neg? (x|<num>) (< x 0))
 
 (def neg (x|<num>) (%neg x))
 (def abs (x|<num>) (%abs x))
 
-(def num-to-string-base () #t)
+(def num-to-str-base (n|<num> b|<int>) (num-to-str n))
 
-(def num-to-string (n|<num>) (%number->string n))
-(def string-to-num (n|<num>) (%string->number n))
+(def num-to-str (n|<num>) (%number->string n))
+(def str-to-num (n|<num>) (%string->number n))
 
 (def $e 2.71)
 (def $pi 3.141592654)
 
 (def log (x|<num>) (%log x))
-
 (def logn (x|<num>) (%logn x))
 
 (def sin (x|<num>) (%sin x))
 (def cos (x|<num>) (%cos x))
 (def tan (x|<num>) (%tan x))
-
 (def asin (x|<num>) (%asin x))
 (def acos (x|<num>) (%acos x))
 (def atan (x|<num>) (%atan x))
@@ -84,25 +133,74 @@
 (def cosh (x|<num>) (%cosh x))
 (def tanh (x|<num>) (%tanh x))
 
-(def bit-or () #t)
-(def bit-and () #t)
-(def bit-xor () #t)
+;; int
+
+(def | (x|<int> y|<int>) (%bit-or x y))
+(def & (x|<int> y|<int>) (%bit-and x y))
+(def ^ (x|<int> y|<int>) (%bit-xor x y))
+(def ~ (x|<int> y|<int>) (%bit-not x y))
 
 (def bit? () #t)
 
 (def even? (n|<num>) (= 0 (mod n 2)))
 (def odd? (n|<num>) (= 1 (mod n 2)))
 
-(def gcd () #t)
-(def lcm () #t)
-(def << () #t)
-(def >> () #t)
-(def >>> () #t)
+(def gcd (x|<int> y|<int>) (%gcd x y))
+(def lcm (x|<int> y|<int>) (%lcm x y))
+(def << (x|<int> n|<int>) x)
+(def >> (x|<int> n|<int>) x)
+(def >>> (x|<int> n|<int>) x)
 
-(def float-bits (x|<float>) x)
+(def flo-bits (x|<float>) x)
 
 (def as (type|(t= <num>) x|<string>) (%string->number x))
 (def as (type|(t= <string>) x|<num>) (%number->string x))
 
 (def as (type|(t= <string) x|<symbol>) (%symbol->string x))
 (def as (type|(t= <symbol>) x|<string>) (%string->symbol x))
+
+(export <any>
+	as == ~==
+	= ~=
+
+	
+	to-str
+
+	;; log
+	<log>
+	not
+
+	;; mag
+	<mag>
+	< > <= >=
+	
+	min max
+
+	;; chr
+	<chr> alpha? digit? lower? upper? to-digit to-lower to-upper
+
+	;; num
+	<num>
+	+ - * /
+	
+	round round-to floor ceil trunc mod div rem
+	pow exp sqrt
+	pos? zero? neg? 
+	neg abs
+	num-to-str-base num-to-str str-to-num
+	$e $pi
+	log logn 
+	sin cos tan asin acos atan atan2
+	sinh cosh tanh
+
+	;; int
+	<int>
+	| & ^ ~ bit?
+	even? odd?
+	gcd lcm
+        << >> >>>
+
+        ;; flo
+        <flo>
+	float-bits
+	)

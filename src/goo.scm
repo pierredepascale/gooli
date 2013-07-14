@@ -1148,6 +1148,8 @@
 ;; type -- primitives
 (def %isa? ((x <any>) (y <type>)) (is? x y))
 (def %subtype? ((x <type>) (y <type>)) (subtype? x y))
+(def %class-of ((x <any>)) (class-of x))
+
 (def %t= ((x <any>)) (make-singleton x))
 
 ;; (def <subclass>
@@ -1183,8 +1185,6 @@
 
 (def %class-props ((x <class>)) (class-props x))
 
-
-
 ;; fun -- primitives
 (def %fun-name ((x <fun>)) (fun-name x))
 (def %fun-specs ((x <fun>)) (fun-specs x))
@@ -1195,7 +1195,7 @@
 
 (def %generic-add-method! ((x <generic>) (y <method>)) (generic-add-method! x y))
 (def %sorted-applicable-methods ((x <generic>) (args <any>)) (sorted-applicable-methods x args))
-(def %method-applicable? ((x <method>) args) (method-applicable x args))
+(def %method-applicable? ((x <method>) (args <any>)) (method-applicable? x args))
 
 (def %sup () (error "SUP not implemented"))
 
@@ -1215,7 +1215,9 @@
 (def %pair ((h <any>) (t <any>)) (cons h t))
 (def %head ((p <pair>)) (car p))
 (def %tail ((p <pair>)) (cdr p))
+(def %null? ((p <any>)) (null? p))
 
+(def %make-vector ((size <num>) (fill <any>)) (make-vector size fill))
 (def %vector-ref ((v <vector>) (i <int>)) (vector-ref v i))
 (def %vector-set! ((v <vector>) (i <int>) (o <any>)) (vector-set! v i o))
 

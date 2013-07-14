@@ -1,5 +1,6 @@
 ;;; char.gooli -- character procedure
 
+(use primitives)
 (use runtime/scalar)
 
 (def alpha? (ch|<char>)
