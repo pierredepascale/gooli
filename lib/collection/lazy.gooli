@@ -1,0 +1,34 @@
+;;; lazy.gooli -- lazy sequence
+
+(use primitive)
+
+(defclass <range> (<seq.>)
+  ((%range-from <int> 0)
+   (%range-by <int> 1)
+   (%range-to <int> 10)))
+
+(def range-by (from|<num> test|<fun> lim|<num> by|<fun>)
+  (make <range> from test lim by))
+
+(def range (from|<num> test|<fun> lim|<fun>)
+  (range-by from test lim (fun (x|<any>) (+ x 1))))
+
+(def from)
+
+(def below)
+
+(defclass <step> (<seq.>)
+  ())
+
+(def first-then)
+
+(def each)
+
+(defclass <cycle> (<seq.>)
+  ((seq <seq> '())))
+
+(def cycle (&rest x) x)
+
+(export <range> range-by range from below
+        <strp> first-then each
+        <cycle> cycle)

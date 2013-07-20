@@ -1,6 +1,24 @@
 ;;; scalar.gooli --
 
-(use primitives)
+(use primitives
+     runtime/type)
+
+(defmacro and (e)
+  (if (%null? (%tail e))
+      #t
+      (%pair 'if
+             (%pair (%head (%tail e))
+                    (%pair (%pair 'and (%tail (%tail e)))
+                           (%pair #f '()))))))
+
+(defmacro or (e)
+  (if (%null? (%tail e))
+      #f
+      (%pair 'if
+             (%pair (%head (%tail e))
+                    (%pair #t
+                           (%pair (%pair 'or (%tail (%tail e)))
+                                  '()))))))
 
 ;; any
 (def as (x|<type> y|<any>)
@@ -10,7 +28,7 @@
 
 (def == (x|<any> y|<any>) (%eq? x y))
 
-(def = (x|<any> y|<any>) (== x y)
+(def = (x|<any> y|<any>) (== x y))
 
 (def ~= (x|<any> y|<any>) (if (= x y) #f #t))
 
@@ -20,7 +38,7 @@
 
 ;; boolean
 
-(def not (x|<bool>) (if x #f #t))
+(def not (x|<log>) (if x #f #t))
 
 ;; magnitude
 (def < (x|<mag> y|<mag>) (error "< not implemented"))
@@ -33,47 +51,45 @@
 
 ;; char
 
-(def alpha? (ch|<char>)
+(def alpha? (ch|<chr>)
   (let ((code (as <int> ch)))
     (or (and (<= (as <int> #\a) code) (<= code (as <int> #\z)))
         (and (<= (as <int> #\A) code) (<= code (as <int> #\Z))))))
 
-(def digit? (ch|<char>)
+(def digit? (ch|<chr>)
   (let ((code (as <int> ch)))
     (and (<= (as <int> #\0) code) (<= code (as <int> #\9)))))
 
-(def lower? (ch|<char>)
+(def lower? (ch|<chr>)
   (let ((code (as <int> ch)))
     (and (<= (as <int> #\a) code) (<= code (as <int> #\z)))))
 
-(def upper? (ch|<char>)
+(def upper? (ch|<chr>)
   (let ((code (as <int> ch)))
     (and (<= (as <int> #\A) code) (<= code (as <int> #\Z)))))
 
-(def to-digit (ch|<char>)
+(def to-digit (ch|<chr>)
   (if (digit? ch)
       (- (as <int> ch) (as <int> #\0))
       (value-error "argument is not a digit character ~a" ch)))
 
-(def to-lower (ch|<char>)
+(def to-lower (ch|<chr>)
   (if (upper? ch)
-      (as <char> (+ (as <int> #\a) (- (as <int> ch) (as <int> #\A))))
+      (as <chr> (+ (as <int> #\a) (- (as <int> ch) (as <int> #\A))))
       ch))
 
-(def to-upper (ch|<char>) #\A)
+(def to-upper (ch|<chr>)
   (if (lower? ch)
-      (as <char> (+ (as <int> #\A) (- (as <int> ch) (as <int> #\a))))
+      (as <chr> (+ (as <int> #\A) (- (as <int> ch) (as <int> #\a))))
       ch))
 
-(def < (ch1|<char> ch2|<char>)
-  (< (as <int> code1) (as <int> code2)))
+(def < (ch1|<chr> ch2|<chr>) (< (as <int> ch1) (as <int> xh2)))
+(def = (ch1|<chr> ch2|<chr>) (= (as <int> ch1) (as <int> ch2)))
 
-(def = (ch1|<char> ch2|<char>) (= (as <int> ch1) (as <int> ch2)))
-
-(def as (type|(t= <char>) n|<int>)
+(def as (type|(t= <chr>) n|<int>)
   (%int->char n))
 
-(def as (type|(t= <int>) ch|<char>)
+(def as (type|(t= <int>) ch|<chr>)
   (%char->int ch))
 
 ;; numbers
@@ -92,11 +108,11 @@
 (def round-to (x|<num> n |<int>) x)
 
 (def floor (x|<num>) (%floor x))
-(def ceil (x|<num>) (%ceil x)
-(def trunc (x|<num>) (%trunc x)
-(def mod (x|<num>) (%mod x)
-(def div (x|<num>) (%div x)
-(def rem (x|<num>) (%rem x)
+(def ceil (x|<num>) (%ceil x))
+(def trunc (x|<num>) (%trunc x))
+(def mod (x|<num> y|<num>) (%mod x y))
+(def div (x|<num> y|<num>) (%div x y))
+(def rem (x|<num> y|<num>) (%rem x y))
 
 (def pow (x|<num> e|<num>) x)
 (def exp (x|<num>) x)
@@ -115,8 +131,8 @@
 (def num-to-str (n|<num>) (%number->string n))
 (def str-to-num (n|<num>) (%string->number n))
 
-(def $e 2.71)
-(def $pi 3.141592654)
+(def $e 271)
+(def $pi 3141592654)
 
 (def log (x|<num>) (%log x))
 (def logn (x|<num>) (%logn x))
@@ -153,54 +169,54 @@
 
 (def flo-bits (x|<float>) x)
 
-(def as (type|(t= <num>) x|<string>) (%string->number x))
-(def as (type|(t= <string>) x|<num>) (%number->string x))
+(def as (type|(t= <num>) x|<str>) (%string->number x))
+(def as (type|(t= <str>) x|<num>) (%number->string x))
 
-(def as (type|(t= <string) x|<symbol>) (%symbol->string x))
-(def as (type|(t= <symbol>) x|<string>) (%string->symbol x))
+(def as (type|(t= <str>) x|<sym>) (%symbol->string x))
+(def as (type|(t= <sym>) x|<str>) (%string->symbol x))
 
 (export <any>
-	as == ~==
-	= ~=
+        as == ~==
+        = ~=
+        
+        
+        to-str
+        
+        ;; log
+        <log>
+        not
+        
+        ;; mag
+        <mag>
+        < > <= >=
+        
+        min max
+        
+        ;; chr
+        <chr> alpha? digit? lower? upper? to-digit to-lower to-upper
+        
+        ;; num
+        <num>
+        + - * /
+        
+        round round-to floor ceil trunc mod div rem
+        pow exp sqrt
+        pos? zero? neg? 
+        neg abs
+        num-to-str-base num-to-str str-to-num
+        $e $pi
+        log logn 
+        sin cos tan asin acos atan atan2
+        sinh cosh tanh
 
-	
-	to-str
-
-	;; log
-	<log>
-	not
-
-	;; mag
-	<mag>
-	< > <= >=
-	
-	min max
-
-	;; chr
-	<chr> alpha? digit? lower? upper? to-digit to-lower to-upper
-
-	;; num
-	<num>
-	+ - * /
-	
-	round round-to floor ceil trunc mod div rem
-	pow exp sqrt
-	pos? zero? neg? 
-	neg abs
-	num-to-str-base num-to-str str-to-num
-	$e $pi
-	log logn 
-	sin cos tan asin acos atan atan2
-	sinh cosh tanh
-
-	;; int
-	<int>
-	| & ^ ~ bit?
-	even? odd?
-	gcd lcm
+        ;; int
+        <int>
+        | & ^ ~ bit?
+        even? odd?
+        gcd lcm
         << >> >>>
-
+        
         ;; flo
         <flo>
-	float-bits
-	)
+        float-bits
+        )

@@ -1,0 +1,13 @@
+;;; flat.gooli -- efficient sequence with constant access time
+
+(use primitive)
+
+(defclass <vec> (<flat>)
+  ((vec-fill <int> 0)
+   (vec-vec <vector> #())))
+
+(def elt (v|<vec> i|<int>) (elt (vec-vec v) i))
+
+
+(export <flat> <flat-enum> <tup>
+        tup <vec> vec)
