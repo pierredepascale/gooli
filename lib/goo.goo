@@ -1,12 +1,14 @@
 (use runtime/type
      runtime/condition
      runtime/scalar
-;     runtime/collection
-;     runtime/fun
-;     runtime/io
-;     runtime/string
-;     runtime/tables
-;     runtime/vector
+     runtime/fun
+     collection/collection
+;     collection/sequence
+     collection/string
+;     collection/flat
+;     collection/enum
+;     collection/lazy
+;     collection/map
      )
 
 (export 
@@ -163,6 +165,7 @@ file-opening-error-filename
 
  ;; string.gooli
 
+ <str>
  str case-insensitive-string-hash
  case-ensisitive-equal
 

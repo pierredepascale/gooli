@@ -1,0 +1,57 @@
+(use primitives)
+
+(defmacro and (e)
+  (if (%null? (%tail e))
+      #t
+      (%pair 'if
+             (%pair (%head (%tail e))
+                    (%pair (%pair 'and (%tail (%tail e)))
+                           (%pair #f '()))))))
+
+(defmacro or (e)
+  (if (%null? (%tail e))
+      #f
+      (%pair 'if
+             (%pair (%head (%tail e))
+                    (%pair #t
+                           (%pair (%pair 'or (%tail (%tail e)))
+                                  '()))))))
+
+(defmacro unless (e)
+  (%pair 'if
+	 (%pair (%head (%tail e))
+		(%pair #f
+		       (%pair (%tail (%tail e))
+			      '())))))
+
+(defmacro when (e)
+  (%pair 'if
+	 (%pair (%head (%tail e))
+		(%pair (%pair 'seq
+			      (%tail (%tail e)))
+		       (%pair #f '())))))
+
+(def map (f lst)
+  (if (%null? lst)
+      lst
+      (%pair (f (%head lst)) (map f (%tail lst)))))
+
+(defmacro rep (e)
+  (let ((name (%head (%tail e)))
+	(bindings (%head (%tail (%tail e))))
+	(body (%tail (%tail (%tail e)))))
+    (let ((names (map (fun (e) (%head e)) bindings))
+	  (args (map (fun (e) (%head (%tail e))) bindings)))
+      (%pair 'loc
+	     (%pair (%pair (%pair name
+				  (%pair (%pair 'fun 
+						(%pair names body))
+					 '()))
+			   '())
+		    (%pair (%pair name args)
+			   '()))))))
+
+(export and or
+	unless when
+	rep
+	for)

@@ -4,21 +4,23 @@
 (define (if? exp) (and (pair? exp) (eq? (car exp) 'if)))
 (define (def? exp) (and (pair? exp) (eq? (car exp) 'def)))
 (define (let? exp) (and (pair? exp) (eq? (car exp) 'let)))
+(define (loc? exp) (and (pair? exp) (eq? (car exp) 'loc)))
 (define (seq? exp) (and (pair? exp) (eq? (car exp) 'seq)))
 (define (fun? exp) (and (pair? exp) (eq? (car exp) 'fun)))
 (define (defmacro? exp) (and (pair? exp) (eq? (car exp) 'defmacro)))
 (define (defclass? exp) (and (pair? exp) (eq? (car exp) 'defclass)))
-(define (set!? exp) (and (pair? exp) (eq? (car exp) 'set!)))
+(define (set!? exp) (and (pair? exp) (eq? (car exp) 'set)))
 (define (use? exp) (and (pair? exp) (eq? (car exp) 'use)))
 (define (export? exp) (and (pair? exp) (eq? (car exp) 'export)))
 
 (define (ev-goo exp env)
-  ;;(display ";;eval ") (display exp) (newline)
+  (display ";;eval ") (display exp) (newline)
   (cond ((literal? exp) (ev-goo-literal exp env))
         ((symbol? exp) (ev-goo-variable exp env))
         ((if? exp) (ev-goo-if exp env))
         ((def? exp) (ev-goo-def exp env))
         ((let? exp) (ev-goo-let exp env))
+	((loc? exp) (ev-goo-loc exp env))
         ((seq? exp) (ev-goo-seq exp env))
         ((fun? exp) (ev-goo-fun exp env))
         ((defmacro? exp) (ev-goo-macro exp env))
@@ -29,7 +31,7 @@
         ((pair? exp) (ev-goo-application exp env))
         (else (error "unknown expression ~a to evaluate" exp))))
 
-(define (name->filename name) (string-append name ".gooli"))
+(define (name->filename name) (string-append name ".goo"))
 
 (define *module-path* '("./"))
 
@@ -120,9 +122,9 @@
 (define (keyword? obj)
   (and (symbol? obj)
        (let ((str (symbol->string obj)))
-	 (and (> 0 (string-length str))
+	 (and (> (string-length str) 0)
 	      (char=? #\: (string-ref str 0))))))
-
+	
 (define (literal? exp)
   (or (string? exp)
       (char? exp)
@@ -130,6 +132,7 @@
       (eq? exp #t)
       (eq? exp #f)
       (keyword? exp)
+      (eq? exp '())
       (and (pair? exp) (eq? (car exp) 'quote))))
 
 (define (ev-goo-literal exp env)
@@ -216,7 +219,7 @@
 (define *runtime-sig*
   '(<any> <type> <class> <union> <singleton> <subclass>
           <mag> <num> <int> <float> <log> <chr>
-          <str> <sym> <col> <lst> <pair> <nil> <fun>
+          <str> <sym> <col> <seq> <lst> <pair> <nil> <fun>
           <met> <gen> <input-port> <output-port>
           %isa? %subtype? %alloc-instance make %t= %t< %type-class %t+ union-elts %t?
           %class-name %class-parents %class-direct-props %class-props
@@ -224,13 +227,14 @@
 	  %eq? %int->char %char->int %+ %- %* %/ %> %< %>= %<=
 	  %round %floor %ceil %trunc %mod %div %rem
  
-          %fun-name %fun-specs %fun-nary? %fun-arity %apply
+          %fun-name %fun-specs %fun-nary? %fun-arity %apply %apply2
 	  %fun-methods
 	  %generic-add-method! %sorted-application-methods %method-applicable?
 	  %sup
 
           %pair %head %tail %null?
-          %vector-ref %vector-set!
+          %make-vector %vector-ref %vector-set! %vector-length
+	  %make-string %string-ref %string-set! %string-length
 
           %read %write
           %open-input-file %open-output-file
@@ -250,7 +254,8 @@
 	  (set-module-defined! module (cons (cons name value) defs))))))
   
 (define (bind-def! module name value)
-  (let ((entry (assq name (module-defined module))))
+  (let ((entry (or (lookup-defined name module)
+		   (lookup-exported name module))))
     (if entry
         (let ((old (cdr entry)))
           (cond ((method? old)
@@ -258,7 +263,8 @@
 							 (list old value))))
                 ((generic? old)
                  (generic-add-method! old value))
-                (else (bind-global! module name value))))
+                (else (display ";; binding redefinition of ") (display name) (newline)
+		      (bind-global! module name value))))
 	(bind-global! module name value))))
 
 (define (ev-goo-def exp env)
@@ -270,7 +276,7 @@
 					,@(cdddr exp))
 				  env)))
 	  (set-method-name! method name)
-          (bind-def! (env-module env) name method)
+	  (bind-def! (env-module env) name method)
 	  method))))
 
 ;;; binding form
@@ -288,17 +294,26 @@
   (let* ((binding (cadr exp))
          (vars (map car binding))
          (vals (map (lambda (b) (ev-goo (cadr b) env)) binding)))
-    (ev-goo-seq (cddr exp)
+    (ev-goo-seq* (cddr exp)
                 (bind-variables vars vals env))))
+
+(define (ev-goo-loc exp env)
+  (let* ((binding (cadr exp))
+         (vars (map car binding))
+	 (env* (bind-variables vars (map (lambda (v) #f) vars) env))
+         (vals (map (lambda (b) (set-var! (car b) (ev-goo (cadr b) env*) env*)) binding)))
+    (ev-goo-seq* (cddr exp) env*)))
 
 ;;; seq form
 
-(define (ev-goo-seq exp env)
+(define (ev-goo-seq* exp env)
   ;(display ";; ev ") (display exp) (display " in ") (display env) (newline)
   (cond ((null? exp) #f)
         ((null? (cdr exp)) (ev-goo (car exp) env))
         (else (ev-goo (car exp) env)
-              (ev-goo-seq (cdr exp) env))))
+              (ev-goo-seq* (cdr exp) env))))
+
+(define (ev-goo-seq exp env) (ev-goo-seq* (cdr exp) env))
 
 ;;; fun form evaluation
 
@@ -436,10 +451,10 @@
     (if (method-applicable? method args)
 	(if (procedure? code)
 	    (apply code args)
-	    (ev-goo-seq code (bind-arguments args env names keys rest)))
+	    (ev-goo-seq* code (bind-arguments args env names keys rest)))
 	(error "method ~a not applicable to ~a" method args))))
 
-(define (ev-goo-app-method fun args types env)
+(define (ev-goo-app-method fun args types)
   (apply-method fun args))
 
 (define (ev-goo-app-methods meth next-methods args)
@@ -486,7 +501,7 @@
                       (car meths)
                       (cons smallest unordered)))))))
 
-(define (ev-goo-app-generic fun args types env)
+(define (ev-goo-app-generic fun args types)
   (let* ((methods (generic-methods fun))
          (m1 (applicable-methods methods args))
          (m2 (sorted-applicable-methods m1)))
@@ -495,15 +510,18 @@
 (define (ev-goo-app-macro macro exp env)
   (ev-goo (apply-method (macro-expander macro) (list exp)) env))
 
+(define (ev-goo-apply fun args)
+  (let ((types (map class-of args)))
+    (cond ((method? fun) (ev-goo-app-method fun args types))
+	  ((generic? fun) (ev-goo-app-generic fun args types))
+	  (else (error "cannot call ~a" fun)))))
+    
 (define (ev-goo-application exp env)
   (let ((fun (ev-goo (car exp) env)))
     (if (macro? fun)
         (ev-goo-app-macro fun exp env)
-        (let* ((args (map (lambda (e) (ev-goo e env)) (cdr exp)))
-               (types (map class-of args)))
-          (cond ((method? fun) (ev-goo-app-method fun args types env))
-                ((generic? fun) (ev-goo-app-generic fun args types env))
-                (else (error "cannot call ~a" fun)))))))
+        (let ((args (map (lambda (e) (ev-goo e env)) (cdr exp))))
+	  (ev-goo-apply fun args)))))
 
 ;;; class
 
@@ -664,16 +682,18 @@
 (define :float (create-class '<float> (list :num) (list)))
 (define :bool (create-class '<log> (list :any) (list)))
 (define :char (create-class '<chr> (list :mag) (list)))
-(define :string (create-class '<str> (list :any) (list)))
 (define :symbol (create-class '<sym> (list :any) (list)))
 
 (define :col (create-class '<col> (list :any) (list)))
+(define :col! (create-class '<col!> (list :any) (list)))
+(define :seq (create-class '<seq> (list :col) (list)))
+(define :string (create-class '<str> (list :seq) (list)))
 
 (define :list (create-class '<lst> (list :any) (list)))
 (define :pair (create-class '<pair> (list :list) (list)))
 (define :nil (create-class '<nil> (list :list) (list)))
 
-(define :vector (create-class '<vector> (list) (list)))
+(define :vector (create-class '<vector> (list :seq) (list)))
 
 (define :fun (create-class '<fun> (list :any) (list)))
 (define :method (create-class '<met> (list :fun) (list)))
@@ -692,10 +712,6 @@
 						  #f
 						  #f
 						  #f (lambda (?arg ...) . ?body))))))
-
-(define-syntax boot
-  (syntax-rules ()
-    ((boot ?exp ...) (begin (ev-goo '?exp (make-env *goo-runtime* '())) ...))))
 
 (define-syntax def!
   (syntax-rules ()
@@ -718,6 +734,8 @@
 (def! <sym> :symbol)
 
 (def! <col> :col)
+(def! <seq> :seq)
+
 (def! <lst> :list)
 (def! <pair> :pair)
 (def! <nil> :nil)
@@ -802,7 +820,8 @@
 (def %fun-specs ((x <fun>)) (fun-specs x))
 (def %fun-nary? ((x <fun>)) (fun-nary? x))
 (def %fun-arity ((x <fun>)) (fun-arity x))
-(def %apply ((f <fun>) (args <any>)) (apply f args))
+(def %apply ((f <fun>) (args <any>)) (apply-method f args))
+(def %apply ((f <fun>) (arg <any>) (args <any>)) (apply-method f (cons arg args)))
 (def %fun-methods ((x <gen>)) (fun-methods x))
 
 (def %generic-add-method! ((x <gen>) (y <met>)) (generic-add-method! x y))
@@ -828,6 +847,12 @@
 (def %make-vector ((size <num>) (fill <any>)) (make-vector size fill))
 (def %vector-ref ((v <vector>) (i <int>)) (vector-ref v i))
 (def %vector-set! ((v <vector>) (i <int>) (o <any>)) (vector-set! v i o))
+(def %vector-length ((v <vector>)) (vector-length v))
+
+(def %make-string ((size <num>) (fill <chr>)) (make-string size fill))
+(def %string-ref ((s <str>) (i <num>)) (string-ref s i))
+(def %string-set! ((s <str>) (i <num>) (ch <chr>)) (string-set! s i ch))
+(def %string-length ((s <str>)) (string-length s))
 
 ;; READER
 
@@ -869,7 +894,7 @@
   (let ((ch (peek-char port)))
     (cond ((eof-object? ch) ch)
           ((or (char=? ch #\space) (char=? ch #\newline)
-               (char=? ch #\return))
+               (char=? ch #\return) (char=? ch #\tab))
            (read-char port)
            (read-noise port))
           ((char=? ch #\;) (read-comment port) (read-noise port))
@@ -1041,7 +1066,7 @@
         ((instance? obj) (display "{instance ") (display (class-name (instance-class obj))) (display "}"))
         (else (write obj))))
 
-(define *goo-user* (make-module 'gooli-user '() '() '() '()))
+(define *goo-user* (make-module 'goo-user '() '() '() '()))
 
 (bind-module! *goo-user*)
 

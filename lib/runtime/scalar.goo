@@ -1,24 +1,8 @@
 ;;; scalar.gooli --
 
 (use primitives
+     runtime/macro
      runtime/type)
-
-(defmacro and (e)
-  (if (%null? (%tail e))
-      #t
-      (%pair 'if
-             (%pair (%head (%tail e))
-                    (%pair (%pair 'and (%tail (%tail e)))
-                           (%pair #f '()))))))
-
-(defmacro or (e)
-  (if (%null? (%tail e))
-      #f
-      (%pair 'if
-             (%pair (%head (%tail e))
-                    (%pair #t
-                           (%pair (%pair 'or (%tail (%tail e)))
-                                  '()))))))
 
 ;; any
 (def as (x|<type> y|<any>)

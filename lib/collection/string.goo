@@ -1,0 +1,38 @@
+;;; string.gooli
+
+(use primitives
+     collection/collection
+     runtime/type
+     runtime/char
+     runtime/scalar)
+
+(def to-lower (s|<str>) s)
+(def to-upper (s|<str>) s)
+
+(def case-insensitive-string-hash (s|<str>) 12)
+(def case-insensitive-string-equal ())
+
+(def str(&rest elts) elts)
+
+(def as (t|(t= <str>) x|<sym>) (%sym->str x))
+
+(def make (t|(t= <str>) &key size (fill #\space)) (%make-string size fill))
+(def len (t|<str>) (%string-length t))
+
+(def elt-type (x|<str>) <chr>)
+
+(def elt (s|<str> k|<int>) (%string-ref s k))
+(def elt-or (s|<str> k|<int> d|<any>) (%string-ref s k))
+
+(def elt-setter (s|<str> ch|<chr> k|<int>) (%string-set! s k ch))
+
+(def to-str (x|<str>) x)
+
+(def add (s|<str> c|<chr>)
+  (cat (make <str> :size 1 :fill c) s))
+
+(export str
+	<str>
+	len elt
+        case-insensitive-string-hash
+        case-insensitive-stirng-equal)

@@ -12,7 +12,7 @@
 
 (def make (type|<type> &rest args)
   (let ((instance (%alloc-instance type)))
-    (apply initialize instance args)
+    (%apply initialize instance args)
     instance))
 
 (def init (instance|<any> args)

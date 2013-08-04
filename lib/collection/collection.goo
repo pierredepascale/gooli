@@ -1,0 +1,161 @@
+;;; collection.gooli -- collection
+
+(use primitives
+  runtime/macro
+  runtime/type
+  runtime/scalar)
+
+;(def fab (t|(t< <col>) n|<int>) n)
+
+(def col (t|(t< <col>) &rest keyvals) t)
+
+(def fabs (t|(t< <col>) &rest elts) t)
+
+(def len (x|<col>)
+  (rep count ((e (enum x)) (l 0))
+    (if (fin? e) l (count (nxt e) (+ l 1)))))
+
+(def col-res-type (x|<col>) (%class-of x))
+
+(def nul? (x|<col>) (= (len x) 0))
+
+(def nul (x|(t< <col>)) (make x :size 0 :fill #f))
+
+(def key-test (x|<col>) ==)
+
+(def key-type (x|<col>) <any>)
+
+(def elt-type (x|<col>) <any>)
+
+(def elt (x|<col> k|<any>)
+  (rep nth ((e (enum x)))
+    (if (fin? e)
+        (error "element not found")
+        (if (== k (now-key e))
+            (now e)
+            (nth (nxt e))))))
+
+(def elt-or (x|<col> k|<any> d|<any>)
+  (rep nth ((e (enum x)))
+    (if (fin? e)
+        d
+        (if (== k (now-key e))
+            (now e)
+            (nth (nxt e))))))
+
+(def mem? (x|<col> y|<any>)
+  (rep test ((e (enum x)))
+    (if (fin? e)
+        #f
+        (or (== y (now e)) (test (nxt e))))))
+
+(def add (x|<col> y|<any>) x)
+
+(def elts (x|<col> keys|<seq>)
+  (rep members ((e (enum keys)))
+    (if (fin? e)
+        '()
+        (%pair (elt x (now e)) (nxt e)))))
+
+(def dup (x|<col>) x)
+
+(def keys (x|<col>)
+  (rep collect ((e (enum x)))
+    (if (fin? e)
+        '()
+        (%pair (now-key e) (collect (nxt e))))))
+
+(def items (x|<col>)
+  (rep collect ((e (enum x)))
+    (if (fin? e)
+        '()
+        (%pair (now e) (collect (nxt e))))))
+
+(def del (x|<col> key|<any>)
+  (rep copy ((e (enum x))
+             (res (zap x)))
+    (if (fin? e)
+        res
+        (if (== key (now-key e))
+            (copy (nxt e) res)
+            (copy (nxt e) (add res (now e)))))))
+
+(def zap (x|<col>) (make (class-of x) :size 0 :fill #f))
+
+(def fill (x|<col> y|<any>)
+  (error "no FILL method"))
+
+(def any? (f|<fun> x|<col>)
+  (rep test ((e (enum x)))
+    (if (fin? e)
+        #f
+        (or (f (now e)) (test (nxt e))))))
+
+(def find (f|<fun> x|<col>)
+  (find-or f x #f))
+
+(def find-or (f|<fun> x|<col> d|<any>)
+  (rep test ((e (enum x)))
+    (if (fin? e)
+        d
+        (if (f (now e))
+            (now e)
+            (test (nxt e))))))
+
+(def all? (f|<fun> x|<col>)
+  (rep lp ((e (enum x)))
+    (if (fin? e)
+	#t
+        (and (f (now e)) (lp (nxt e))))))
+
+(def fold (f|<fun> init|<any> c|<col>) init)
+
+(def fold+ (f|<fun> c|<col>) f)
+
+(def do (f|<fun> c|<col>)
+  (rep do ((e (enum c)))
+    (unless (fin? e)
+      (f (now e))
+      (do (nxt e)))))
+
+(def map (f|<fun> c|<col>)
+  (rep map ((e (enum c)))
+    (if (fin? e)
+        '()
+        (%pair (f (now e)) (map (nxt e))))))
+
+;; mutable collection
+
+(defclass <col!> ())
+
+(def elt-setter (v|<any> x|<col!> k|<any>) v)
+(def into (x|<col!> y|<col>) x)
+(def elt! (x|<col!> y|<any> default|<fun>) x)
+(def fill! (x|<col!> y|<any>)
+  (rep fill ((e (eum x)))
+    (if (fin? e)
+        x
+        (seq
+          (set (now e) y)
+          (fill (nxt e))))))
+
+(defclass <seq!> (<seq> <col!>))
+
+(def add! (x|<seq!> y|<any>) x)
+(def del! (x|<seq!> key|<any>) x)
+(def zap! (x|<col!>) x)
+
+(export <col>
+	fab col fabs len
+	col-res-type
+	nul? nul
+	key-test key-type elt-type
+	elt elt-or
+	mem?
+	add alts dup keys items del zap
+	fill any? find find-or all?
+	fold fold+ do map
+
+	<col!>
+	elt-setter
+	into elt! fill! add! del! zap!)

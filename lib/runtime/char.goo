@@ -1,50 +1,49 @@
 ;;; char.gooli -- character procedure
 
-(use primitives)
-(use runtime/scalar)
+(use primitives 
+  runtime/type
+  runtime/scalar)
 
-(def alpha? (ch|<char>)
+(def alpha? (ch|<chr>)
   (let ((code (as <int> ch)))
     (or (and (<= (as <int> #\a) code) (<= code (as <int> #\z)))
         (and (<= (as <int> #\A) code) (<= code (as <int> #\Z))))))
 
-(def digit? (ch|<char>)
+(def digit? (ch|<chr>)
   (let ((code (as <int> ch)))
     (and (<= (as <int> #\0) code) (<= code (as <int> #\9)))))
 
-(def lower? (ch|<char>)
+(def lower? (ch|<chr>)
   (let ((code (as <int> ch)))
     (and (<= (as <int> #\a) code) (<= code (as <int> #\z)))))
 
-(def upper? (ch|<char>)
+(def upper? (ch|<chr>)
   (let ((code (as <int> ch)))
     (and (<= (as <int> #\A) code) (<= code (as <int> #\Z)))))
 
-(def to-digit (ch|<char>)
+(def to-digit (ch|<chr>)
   (if (digit? ch)
       (- (as <int> ch) (as <int> #\0))
       (value-error "argument is not a digit character ~a" ch)))
 
-(def to-lower (ch|<char>)
+(def to-lower (ch|<chr>)
   (if (upper? ch)
-      (as <char> (+ (as <int> #\a) (- (as <int> ch) (as <int> #\A))))
+      (as <chr> (+ (as <int> #\a) (- (as <int> ch) (as <int> #\A))))
       ch))
 
-(def to-upper (ch|<char>) #\A)
+(def to-upper (ch|<chr>)
   (if (lower? ch)
-      (as <char> (+ (as <int> #\A) (- (as <int> ch) (as <int> #\a))))
+      (as <chr> (+ (as <int> #\A) (- (as <int> ch) (as <int> #\a))))
       ch))
 
-(def < (ch1|<char> ch2|<char>)
-  (< (as <int> code1) (as <int> code2)))
+(def < (ch1|<chr> ch2|<chr>)
+  (< (as <int> ch1) (as <int> ch2)))
 
-(def = (ch1|<char> ch2|<char>) (= (as <int> ch1) (as <int> ch2)))
+(def = (ch1|<chr> ch2|<chr>)
+  (= (as <int> ch1) (as <int> ch2)))
 
-(def as (type|(t= <char>) n|<int>)
-  (%int->char n))
-
-(def as (type|(t= <int>) ch|<char>)
-  (%char->int ch))
+(def as (type|(t= <chr>) n|<int>) (%int->char n))
+(def as (type|(t= <int>) ch|<chr>) (%char->int ch))
 
 (export alpha?
 	digit? lower? upper?
