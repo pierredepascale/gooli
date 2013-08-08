@@ -1,5 +1,7 @@
 ;;; fun.gooli
 
+(use primitives)
+
 (def fun-name (x|<fun>) (%fun-name x))
 
 (def fun-specs (x|<fun>) (%fun-specs x))
@@ -10,20 +12,20 @@
 
 (def apply (f|<fun> &rest args) (%apply f args))
 
-(def fun-methods (x|<generic>) (%fun-methods x))
+(def fun-methods (x|<gen>) (%fun-methods x))
 
-(def generic-add-method! (x|<generic> y|<method>)
+(def generic-add-method! (x|<gen> y|<met>)
   (%generic-add-method! x y))
 
-(def sorted-applicable-methods (x|<generic> args)
+(def sorted-applicable-methods (x|<gen> args)
   (%sorted-applicale-methods x args))
 
-(def method-applicable? (x|<method> args)
+(def method-applicable? (x|<met> args)
   (%method-applicable? x args))
 
 (def sup () (error ""))
 
-(export fun-name fun-specs fun-nary? fun-arity
+(export <fun> fun-name fun-specs fun-nary? fun-arity
         apply
         fun-methods
         generic-add-methods

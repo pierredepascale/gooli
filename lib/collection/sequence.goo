@@ -1,6 +1,6 @@
 ;;; sequences.gooli
 
-(use primitive)
+(use primitives)
 
 (def 1st (x|<seq>))
 (def 2nd (x|<seq>))

@@ -3,13 +3,27 @@
 (use primitives
   runtime/macro
   runtime/type
-  runtime/scalar)
+  runtime/scalar
+  collection/enum)
 
 ;(def fab (t|(t< <col>) n|<int>) n)
 
-(def col (t|(t< <col>) &rest keyvals) t)
+(def col (t|(t< <col>) &rest keyvals)
+  (let ((c (make t :size (div (len keyvals) 2))))
+    (rep fill ((e (enum keyvals)))
+      (if (fin? e)
+          c
+          (let ((key (now e)))
+            (set (elt c key) (now (nxt e)))
+            (fill (nxt e)))))))
 
-(def fabs (t|(t< <col>) &rest elts) t)
+(def as (t|(t< <col>) x|<col>)
+  (if (== (class-of x) t)
+      x
+      (fab-into (make t :size (len x)))))
+
+(def fabs (t|(t< <col>) &rest elts)
+  (fab-into (make t :size (len elts)) elts))
 
 (def len (x|<col>)
   (rep count ((e (enum x)) (l 0))
@@ -19,12 +33,10 @@
 
 (def nul? (x|<col>) (= (len x) 0))
 
-(def nul (x|(t< <col>)) (make x :size 0 :fill #f))
+(def nul (x|(t< <col>)) (make x :size 0))
 
 (def key-test (x|<col>) ==)
-
 (def key-type (x|<col>) <any>)
-
 (def elt-type (x|<col>) <any>)
 
 (def elt (x|<col> k|<any>)
@@ -55,9 +67,10 @@
   (rep members ((e (enum keys)))
     (if (fin? e)
         '()
-        (%pair (elt x (now e)) (nxt e)))))
+        (%pair (elt x (now e)) (members (nxt e))))))
 
-(def dup (x|<col>) x)
+(def dup (x|<col>)
+  (fab-into (make (class-of x) :size (len x)) x))
 
 (def keys (x|<col>)
   (rep collect ((e (enum x)))
@@ -69,7 +82,8 @@
   (rep collect ((e (enum x)))
     (if (fin? e)
         '()
-        (%pair (now e) (collect (nxt e))))))
+        (%pair (%pair (now-key e) (now e))
+               (collect (nxt e))))))
 
 (def del (x|<col> key|<any>)
   (rep copy ((e (enum x))
@@ -83,7 +97,12 @@
 (def zap (x|<col>) (make (class-of x) :size 0 :fill #f))
 
 (def fill (x|<col> y|<any>)
-  (error "no FILL method"))
+  (let ((res (dup x)))
+    (rep do-fill ((e (enum res)))
+      (if (fin? e)
+          res
+          (seq (set (now e) y)
+               (do-fill (nxt e)))))))
 
 (def any? (f|<fun> x|<col>)
   (rep test ((e (enum x)))
@@ -91,15 +110,20 @@
         #f
         (or (f (now e)) (test (nxt e))))))
 
+(def $default (%pair 0 0))
+
 (def find (f|<fun> x|<col>)
-  (find-or f x #f))
+  (let ((res (find-or f x $default)))
+    (if (== res $default)
+        (range-error x f)
+        res)))
 
 (def find-or (f|<fun> x|<col> d|<any>)
   (rep test ((e (enum x)))
     (if (fin? e)
         d
         (if (f (now e))
-            (now e)
+            (now-key e)
             (test (nxt e))))))
 
 (def all? (f|<fun> x|<col>)
@@ -108,9 +132,21 @@
 	#t
         (and (f (now e)) (lp (nxt e))))))
 
-(def fold (f|<fun> init|<any> c|<col>) init)
+(def fold (f|<fun> init|<any> c|<col>)
+  (rep lp ((e (enum c)) (res init))
+    (if (fin? e)
+        res
+        (let ((res (f res (now e))))
+          (lp (nxt e) res)))))
 
-(def fold+ (f|<fun> c|<col>) f)
+(def fold+ (f|<fun> c|<col>)
+  (let ((e (enum c)))
+    (rep lp ((res (now e))
+             (e e))
+      (if (fin? e)
+          res
+          (let ((res (f res (now e))))
+            (lp res (nxt e)))))))
 
 (def do (f|<fun> c|<col>)
   (rep do ((e (enum c)))
@@ -128,11 +164,25 @@
 
 (defclass <col!> ())
 
-(def elt-setter (v|<any> x|<col!> k|<any>) v)
-(def into (x|<col!> y|<col>) x)
-(def elt! (x|<col!> y|<any> default|<fun>) x)
+(def elt-setter (v|<any> x|<col!> k|<any>)
+  (error "ELT-SETTER not implemented"))
+
+(def into (x|<col!> y|<col>)
+  (rep copy ((e (enum y)))
+    (if (fin? e)
+        x
+        (seq (set (elt x (now-key e)) (now e))
+             (copy (nxt e))))))
+
+(def elt! (x|<col!> y|<any> default|<fun>)
+  (let ((res (elt x y $default)))
+    (if (== res $default)
+        (seq (set (elt x y) (default))
+             (elt x y))
+        res)))
+
 (def fill! (x|<col!> y|<any>)
-  (rep fill ((e (eum x)))
+  (rep fill ((e (enum x)))
     (if (fin? e)
         x
         (seq
@@ -141,9 +191,9 @@
 
 (defclass <seq!> (<seq> <col!>))
 
-(def add! (x|<seq!> y|<any>) x)
-(def del! (x|<seq!> key|<any>) x)
-(def zap! (x|<col!>) x)
+(def add! (x|<seq!> y|<any>) (add x y))
+(def del! (x|<seq!> key|<any>) (del x y))
+(def zap! (x|<col!>) (zap x))
 
 (export <col>
 	fab col fabs len
@@ -152,7 +202,7 @@
 	key-test key-type elt-type
 	elt elt-or
 	mem?
-	add alts dup keys items del zap
+	add elts dup keys items del zap
 	fill any? find find-or all?
 	fold fold+ do map
 

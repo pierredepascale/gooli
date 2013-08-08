@@ -16,7 +16,7 @@
 
 (def as (t|(t= <str>) x|<sym>) (%sym->str x))
 
-(def make (t|(t= <str>) &key size (fill #\space)) (%make-string size fill))
+(def make (t|(t= <str>) &key (size 0) (fill #\space)) (%make-string size fill))
 (def len (t|<str>) (%string-length t))
 
 (def elt-type (x|<str>) <chr>)

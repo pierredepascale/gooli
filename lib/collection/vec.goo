@@ -1,0 +1,35 @@
+;; vec.goo -- vector support
+
+(use primitives
+  runtime/type
+  runtime/scalar
+  collection/collection
+  collection/enum)
+
+(def elt (x|<vector> i|<int>) (%vector-ref x i))
+(def elt-setter (v|<any> x|<vector> i|<int>) (%vector-set! x i v))
+
+(def add (x|<vector> e|<any>)
+  (as <vector> (add (as <lst> x) e)))
+
+(defclass <vec-enum> ()
+  ((enum-index <int> 0)
+   (enum-vec <vector> #f)))
+
+(def enum (x|<vector>)
+  (make <vec-enum> :enum-index 0 :enum-vec x))
+(def fin? (e|<vec-enum>)
+  (= (enum-index e) (len (enum-vec e))))
+(def now (e|<vec-enum>)
+  (elt (enum-vec e) (enum-index e)))
+(def now-key (e|<vec-enum>)
+  (enum-index e))
+(def nxt (e|<enum>)
+  (make <vec-enum>
+        :enum-index (+ 1 (enum-index e))
+        :enum-vec (enum-vec e)))
+
+(def make (x|(t= <vector>) &key (size 0) (fill #f))
+  (%make-vector size fill))
+
+(export <vector>)

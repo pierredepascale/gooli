@@ -1,21 +1,58 @@
 ;;; list.gooli -- list
 
-(use primitive
-     runtime/collection
-     runtime/sequence)
+(use primitives
+  runtime/macro
+  runtime/type
+  runtime/scalar
+  collection/enum
+  collection/collection
+  ;collection/sequence
+  )
 
-(def head (x|<lst>))
-(def tail (x|<lst>))
+(def nul? (x|<lst>) #f)
+(def nul? (x|<nil>) #t)
+(def add (x|<lst> e|<any>) (%pair e x))
+
+(def head (x|<lst>) (error "HEAD error"))
+(def tail (x|<lst>) (error "TAIL error"))
+
+(def head (x|<pair>) (%head x))
+(def tail (x|<pair>) (%tail x))
+
 (def lst (&rest elts) elts)
 (def list (&rest elts) elts)
 (def lst* (&rest elts) elts)
 
 (def pair (h|<any> t|<lst>) (%pair h t))
 
-(def as (type|(t= <list>) x|<string>) '())
-(def as (type|(t= <string>) x|<list>) "")
+(def as (type|(t= <lst>) x|<str>) '())
+(def as (type|(t= <str>) x|<lst>) "")
 
-(def as (type|(t= <vector>) x|<list>) #())
-(def as (type|(t= <list>) x|<vector>) '())
+;(def as (type|(t= <vector>) x|<lst>) '#())
+;(def as (type|(t= <lst>) x|<vector>) '())
 
-(export head tail lst list lst* pair)
+(defclass <lst-enum> ()
+          ((current <lst> '())
+           (key <int> 0)))
+
+(def enum (x|<lst>)
+  (make <lst-enum> :current x :key 0))
+(def fin? (e|<lst-enum>) (nul? (current e)))
+(def now (e|<lst-enum>) (let ((c (current e))) (if (== c '()) (error "") (%head c))))
+(def now-key (e|<lst-enum>) (key e))
+(def nxt (e|<lst-enum>)
+  (let ((c (current e))
+        (k (key e)))
+    (if (== c '())
+        e
+        (make <lst-enum> :current (%tail c) :key (+ k 1)))))
+
+(def make (c|(t= <lst>) &key (size 0) (fill #f))
+  (when (< size 0) (error "argument error: size negative for building list"))
+  (rep build ((l '())
+              (c size))
+    (if (= c 0)
+        l
+        (build (%pair fill l) (- c 1)))))
+        
+(export <lst> <pair> <nil> head tail lst list lst* pair)

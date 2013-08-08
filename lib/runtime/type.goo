@@ -10,13 +10,13 @@
 
 (def class-of (x|<any>) (%class-of x))
 
-(def make (type|<type> &rest args)
-  (let ((instance (%alloc-instance type)))
-    (%apply initialize instance args)
-    instance))
-
-(def init (instance|<any> args)
+(def init (instance|<any> &rest args)
   instance)
+
+(def make (type|<class> &rest args)
+  (let ((instance (%alloc-instance type)))
+    (%apply2 init instance args)
+    instance))
 
 (def t= (x|<any>) (%t= x))
 
@@ -50,12 +50,6 @@
 (def prop-init (x|<prop>) (error ""))
 
 (def prop-bound? (x gen|<gen>) (error ""))
-
-;; TODO error is not defined here ?!?
-(def as (x|<type> obj|<any>)
-  (if (%isa? obj x)
-      x
-      (error "Cannot coerce ~a to ~a" obj x)))
 
 (export isa? subtype? class-of make init
         <type>

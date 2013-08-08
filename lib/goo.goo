@@ -1,14 +1,16 @@
 (use runtime/type
-     runtime/condition
+;     runtime/condition
      runtime/scalar
      runtime/fun
      collection/collection
 ;     collection/sequence
      collection/string
+     collection/list
 ;     collection/flat
-;     collection/enum
+     collection/enum
 ;     collection/lazy
 ;     collection/map
+     collection/vec
      )
 
 (export 
@@ -76,7 +78,7 @@ nul? nul
 key-test key-type elt-type
 elt elt-or
 mem?
-add alts dup keys items del zap
+add elts dup keys items del zap
 fill any? find find-or all?
 fold fold+ do map
 
@@ -105,7 +107,7 @@ enum fin? nxt now now-setter now-key
 tab-hash id-hash
 
  ;; list.gooli
-head tail lst list lst* pair
+<lst> <pair> <nil> head tail lst list lst* pair
 
  ;; condition.gooli
         <condition>
@@ -172,6 +174,6 @@ file-opening-error-filename
  ;; table.gooli
 
  ;; vector.gooli
-
+ <vector>
 
 )

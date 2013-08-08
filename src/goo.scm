@@ -14,7 +14,7 @@
 (define (export? exp) (and (pair? exp) (eq? (car exp) 'export)))
 
 (define (ev-goo exp env)
-  (display ";;eval ") (display exp) (newline)
+  ;(display ";;eval ") (display exp) (newline)
   (cond ((literal? exp) (ev-goo-literal exp env))
         ((symbol? exp) (ev-goo-variable exp env))
         ((if? exp) (ev-goo-if exp env))
@@ -93,21 +93,51 @@
 	 (prop-init (caddr prop))
 	 (prop-getter-name prop-name)
 	 (prop-setter-name (setter-name prop-getter-name)))
-    (ev-goo-def `(def ,prop-getter-name ((obj ,name)) (%record-ref obj ',prop-name))
-		env)
-    (ev-goo-def `(def ,prop-setter-name ((obj ,name) (value ,prop-type))
-		      (%record-set! obj ',prop-name value))
-		env)))
+    (bind-global! (env-module env) prop-getter-name
+		  (make-method prop-getter-name
+			       '(instance)
+			       (list (ev-goo name env))
+			       #f #f
+			       env
+			       (lambda (i) (instance-ref i prop-getter-name))))
+    (bind-global! (env-module env) prop-setter-name
+		  (make-method prop-setter-name
+			       '(value instance)
+			       (list (ev-goo prop-type env)
+				     (ev-goo name env))
+			       #f #f
+			       env
+			       (lambda (v i) (instance-set! i prop-getter-name v))))))
 
 (define (ev-goo-class-props name props env)
   (for-each (lambda (p) (ev-goo-class-prop name p env)) props))
 
+(define (ev-goo-class-init name props env)
+  (if (not (null? props))  
+      (let ((vars (map car props))
+	    (init (map caddr props)))
+	(ev-goo `(def init ((i ,name) &key ,@(map list vars init))
+		      ,@(map (lambda (v) `(set (,v i) ,v)) vars))
+		env))))
+
+(define (ev-goo-class-make name supers props env)
+  (let ((props* (map (lambda (p) (make-prop (car p)
+					    (ev-goo (cadr p) env)
+					    (ev-goo (caddr p) env)
+					    #f #f))
+		     props)))
+    (bind-global! (env-module env) name
+		  (create-class name
+				(if (eq? supers '()) (list :any) supers)
+				props*))))
+  
 (define (ev-goo-class exp env)
   (let ((name (cadr exp))
         (supers (map (lambda (e) (ev-goo e env)) (caddr exp)))
         (props (if (pair? (cdddr exp)) (cadddr exp) '())))
-    (bind-global! (env-module env) name (create-class name supers props))
-    (ev-goo-class-props name props env)))
+    (ev-goo-class-make name supers props env)
+    (ev-goo-class-props name props env)
+    (ev-goo-class-init name props env)))
 
 ;;; macro
 
@@ -147,7 +177,13 @@
 (define (env-bindings env) (cdr env))
 
 (define (lookup-defined var module)
-  (assq var (module-defined module)))
+  (let ((entry (assq var (module-defined module))))
+    (if entry
+	(begin
+	  ;(display ";; var ") (display var) (display " found in ")
+	  ;(display (module-name module)) (newline)
+	  entry)
+	#f)))
 
 (define (lookup var env)
   (let ((entry (assq var (env-bindings env))))
@@ -219,10 +255,10 @@
 (define *runtime-sig*
   '(<any> <type> <class> <union> <singleton> <subclass>
           <mag> <num> <int> <float> <log> <chr>
-          <str> <sym> <col> <seq> <lst> <pair> <nil> <fun>
+          <str> <sym> <col> <seq> <lst> <vector> <pair> <nil> <fun>
           <met> <gen> <input-port> <output-port>
           %isa? %subtype? %alloc-instance make %t= %t< %type-class %t+ union-elts %t?
-          %class-name %class-parents %class-direct-props %class-props
+          %class-of %class-name %class-parents %class-direct-props %class-props
 
 	  %eq? %int->char %char->int %+ %- %* %/ %> %< %>= %<=
 	  %round %floor %ceil %trunc %mod %div %rem
@@ -259,12 +295,12 @@
     (if entry
         (let ((old (cdr entry)))
           (cond ((method? old)
-                 (bind-global! module name (make-generic name (method-args old)
-							 (list old value))))
+		 (set-cdr! entry (make-generic name (method-args old)
+					       (list old value))))
                 ((generic? old)
                  (generic-add-method! old value))
-                (else (display ";; binding redefinition of ") (display name) (newline)
-		      (bind-global! module name value))))
+                (else (display ";; redefinition of ") (display name) (newline)
+		      (set-cdr! entry value))))
 	(bind-global! module name value))))
 
 (define (ev-goo-def exp env)
@@ -307,7 +343,7 @@
 ;;; seq form
 
 (define (ev-goo-seq* exp env)
-  ;(display ";; ev ") (display exp) (display " in ") (display env) (newline)
+;  (display ";; evseq ") (display exp) (newline)
   (cond ((null? exp) #f)
         ((null? (cdr exp)) (ev-goo (car exp) env))
         (else (ev-goo (car exp) env)
@@ -403,7 +439,7 @@
   (cond ((null? args) default)
 	((and (pair? args) (pair? (cdr args)) (eq? key (car args)))
 	 (cadr args))
-	(else (key-ref key (cddr args)))))
+	(else (key-ref key (cddr args) default))))
 
 (define (keyword->symbol keyword)
   (let ((str (symbol->string keyword)))
@@ -411,7 +447,7 @@
 
 (define (bind-arguments-rest-and-keys args env keys rest)
   (let ((env* (if rest
-		  (bind-variable rest (list->vector args) env)
+		  (bind-variable rest (list->vector (cons 'vector args)) env)
 		  env)))
     (if keys
 	(let lp ((env env*)
@@ -470,12 +506,11 @@
             
 (define (method-applicable? meth args)
   (let applicable? ((types (method-specs meth))
-                    (args args))
-    ;(display (list 'ma? types args)) (newline)
+		    (args args))
     (if (null? types)
-        #t
-        (and (is? (car args) (car types))
-             (applicable? (cdr types) (cdr args))))))
+	#t
+	(and (is? (car args) (car types))
+	     (applicable? (cdr types) (cdr args))))))
 
 (define (method-more-specific? m1 m2)
   (let specific? ((s1 (method-specs m1))
@@ -505,12 +540,16 @@
   (let* ((methods (generic-methods fun))
          (m1 (applicable-methods methods args))
          (m2 (sorted-applicable-methods m1)))
-    (ev-goo-app-methods (car m2) (cdr m2) args)))
+    ;(display ";; gen ") (display (length methods)) (display (length m2)) (newline)
+    (if (eq? m2 '())
+	(error "no applicable methods in generic ~a" fun)
+	(ev-goo-app-methods (car m2) (cdr m2) args))))
 
 (define (ev-goo-app-macro macro exp env)
   (ev-goo (apply-method (macro-expander macro) (list exp)) env))
 
 (define (ev-goo-apply fun args)
+;  (display ";; evga ")  (write (class-of fun)) (write (length args)) (newline)
   (let ((types (map class-of args)))
     (cond ((method? fun) (ev-goo-app-method fun args types))
 	  ((generic? fun) (ev-goo-app-generic fun args types))
@@ -615,7 +654,6 @@
 	((subclass? obj) :subclass)
 	((singleton? obj) :singleton)
 
-	((vector? obj) :vector)
         ((pair? obj) :pair)
         ((null? obj) :nil)
 
@@ -625,20 +663,14 @@
 	((input-port? obj) :input-port)
 	((output-port? obj) :output-port)
 
-        (else (instance-class obj))))
+	((instance? obj) (instance-class obj))
+	((vector? obj) :vector)
+
+        (else (error "unknown class of object ~a" obj))))
 
 (define (alloc-instance class)
   (let* ((size (length (class-props class))))
     (make-instance class (make-vector size #f))))
-
-(define (init-instance instance values)
-  (let lp ((vs values))
-    (if (null? vs)
-	init
-	(let* ((name (car vs))
-	       (value (cadr vs)))
-	  (instance-set! instance name value)
-	  (lp (cddr vs))))))
 
 (define (make-instance class props) (vector 'instance class props))
 (define (instance? i) (and (vector? i) (eq? 'instance (vector-ref i 0))))
@@ -646,9 +678,11 @@
 (define (instance-props i) (vector-ref i 2))
 (define (instance-ref i n)
   (let ((offset (prop-offset (instance-class i) n)))
+;    (display ";; ir ") (display i) (display offset) (newline)
     (vector-ref (instance-props i) offset)))
 (define (instance-set! i n v)
   (let ((offset (prop-offset (instance-class i) n)))
+;    (display ";; is! ") (display i) (display offset) (newline)
     (vector-set! (instance-props i) offset v)))
 
 (define (make-prop name type init getter setter)
@@ -689,7 +723,7 @@
 (define :seq (create-class '<seq> (list :col) (list)))
 (define :string (create-class '<str> (list :seq) (list)))
 
-(define :list (create-class '<lst> (list :any) (list)))
+(define :list (create-class '<lst> (list :seq) (list)))
 (define :pair (create-class '<pair> (list :list) (list)))
 (define :nil (create-class '<nil> (list :list) (list)))
 
@@ -796,6 +830,8 @@
 (def %eq? ((x <any>) (y <any>)) (eq? x y))
 (def %int->char ((x <int>)) (integer->char x))
 (def %char->int ((x <chr>)) (char->integer x))
+(def %str->int ((x <str>)) (string->number x))
+(def %int->str ((x <int>)) (number->string x))
 (def %+ ((x <num>) (y <num>)) (+ x y))
 (def %- ((x <num>) (y <num>)) (- x y))
 (def %* ((x <num>) (y <num>)) (* x y))
@@ -820,8 +856,9 @@
 (def %fun-specs ((x <fun>)) (fun-specs x))
 (def %fun-nary? ((x <fun>)) (fun-nary? x))
 (def %fun-arity ((x <fun>)) (fun-arity x))
-(def %apply ((f <fun>) (args <any>)) (apply-method f args))
-(def %apply ((f <fun>) (arg <any>) (args <any>)) (apply-method f (cons arg args)))
+(def %apply ((f <fun>) (args <any>)) (ev-goo-apply f args))
+(def %apply2 ((f <fun>) (arg <any>) (args <any>))
+     (ev-goo-apply f (cons arg (cdr (vector->list args)))))
 (def %fun-methods ((x <gen>)) (fun-methods x))
 
 (def %generic-add-method! ((x <gen>) (y <met>)) (generic-add-method! x y))
@@ -844,9 +881,13 @@
 (def %tail ((p <pair>)) (cdr p))
 (def %null? ((p <any>)) (null? p))
 
-(def %make-vector ((size <num>) (fill <any>)) (make-vector size fill))
-(def %vector-ref ((v <vector>) (i <int>)) (vector-ref v i))
-(def %vector-set! ((v <vector>) (i <int>) (o <any>)) (vector-set! v i o))
+(def %make-vector ((size <num>) (fill <any>))
+  (let ((v (make-vector (+ 1 size) fill)))
+    (vector-set! v 0 'vector)
+    v))
+
+(def %vector-ref ((v <vector>) (i <int>)) (vector-ref v (+ 1 i)))
+(def %vector-set! ((v <vector>) (i <int>) (o <any>)) (vector-set! v (+ 1 i) o))
 (def %vector-length ((v <vector>)) (vector-length v))
 
 (def %make-string ((size <num>) (fill <chr>)) (make-string size fill))

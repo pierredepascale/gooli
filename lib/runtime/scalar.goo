@@ -6,9 +6,9 @@
 
 ;; any
 (def as (x|<type> y|<any>)
-  (if (isa? x y)
-      x
-      (error "as method not defined")))
+  (if (isa? y x)
+      y
+      (as-error "as method not defined")))
 
 (def == (x|<any> y|<any>) (%eq? x y))
 
@@ -112,8 +112,8 @@
 
 (def num-to-str-base (n|<num> b|<int>) (num-to-str n))
 
-(def num-to-str (n|<num>) (%number->string n))
-(def str-to-num (n|<num>) (%string->number n))
+(def num-to-str (n|<num>) (%int->str n))
+(def str-to-num (n|<num>) (%str->num n))
 
 (def $e 271)
 (def $pi 3141592654)
@@ -153,8 +153,8 @@
 
 (def flo-bits (x|<float>) x)
 
-(def as (type|(t= <num>) x|<str>) (%string->number x))
-(def as (type|(t= <str>) x|<num>) (%number->string x))
+(def as (type|(t= <num>) x|<str>) (%str->num x))
+(def as (type|(t= <str>) x|<num>) (%int->str x))
 
 (def as (type|(t= <str>) x|<sym>) (%symbol->string x))
 (def as (type|(t= <sym>) x|<str>) (%string->symbol x))

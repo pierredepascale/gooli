@@ -1,16 +1,15 @@
 ;; enum.gooli -- enumerator
 
-(use primitive)
+(use primitives)
 
 (defclass <enum> ())
 
-(def enum (x|<any>)) x)
-(def fin?
-(def nxt
-(def now
-(def now-setter
-(def now-key
-(def enum (x|<enum>) x)
+(def enum (x|<any>) (error "enum not implemented"))
+(def fin? (e|<enum>) (error "FIN? not implemented"))
+(def nxt (e|<enum>) (error "NXT not implemented"))
+(def now (e|<enum>) (error "NOW not implemented"))
+(def now-setter (v|<any> e|<enum>) (error "NOW-SETTER not implemented"))
+(def now-key (e|<enum>) (error "NOW-KEY not implemented"))
 
 (defmacro for (e) e)
 
