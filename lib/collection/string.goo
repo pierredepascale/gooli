@@ -2,6 +2,7 @@
 
 (use primitives
      collection/collection
+     collection/enum
      runtime/type
      runtime/char
      runtime/scalar)
@@ -31,8 +32,24 @@
 (def add (s|<str> c|<chr>)
   (cat (make <str> :size 1 :fill c) s))
 
+(defclass <str-enum> (<enum>)
+  ((enum-index <int> 0)
+   (enum-str <str> "")))
+
+(def enum (s|<str>)
+  (make <str-enum> :enum-index 0 :enum-str s))
+(def fin? (e|<str-enum>)
+  (= (enum-index e) (%string-length (enum-str e))))
+(def now (e|<str-enum>)
+  (%string-ref (enum-str e) (enum-index e)))
+(def now-key (e|<str-enum>)
+  (enum-index e))
+(def nxt (e|<str-enum>)
+  (make <str-enum>
+        :enum-index (+ 1 (enum-index e))
+        :enum-str (enum-str e)))
+
 (export str
 	<str>
-	len elt
         case-insensitive-string-hash
         case-insensitive-stirng-equal)

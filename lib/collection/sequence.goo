@@ -1,32 +1,80 @@
 ;;; sequences.gooli
 
-(use primitives)
+(use primitives
+  runtime/macro
+  runtime/type
+  runtime/scalar
+  collection/enum
+  collection/collection)
 
-(def 1st (x|<seq>))
-(def 2nd (x|<seq>))
-(def 3rd (x|<seq>))
-(def last (x|<seq>) (elt x (len x)))
-(def pos (x|<seq> v|<any>) (and (mem? x v) (find x v)))
+;; need reader support
+;(def 1st (x|<seq>) (elt x 0))
+;(def 2nd (x|<seq>) (elt x 1))
+;(def 3rd (x|<seq>) (elt x 2))
+(def last (x|<seq>) (elt x (- (len x) 1)))
+(def pos (x|<seq> v|<any>) (find-or (fun (e) (== v e)) x #f))
 (def finds (x|<seq> y|<seq>) #f)
 
-(def add (x|<seq> y|<any>))
-(def push (x|<seq> y|<any>)
+(def add (x|<seq> y|<any>) x)
+(def push (x|<seq> y|<any>) (ins x y 0))
 (def pop (x|<seq>) x)
-(def rev (x|<seq>) x)
+(def rev (x|<seq>)
+  (rep do ((res '()) (e (enum x)))
+    (if (fin? res)
+        (col-res x res)
+        (do (add res (now e)) (nxt e)))))
+
 (def cat (x|<seq> &rest more) x)
 (def sub (x|<seq> from|<int> below|<int>) x)
 (def sub* (x|<seq> from|<int>) (sub x from (len x)))
-(def ins (x|<seq> i|<int>)
+(def ins (x|<seq> i|<int>) 1)
 (def del-dups (x|<seq>) x)
 (def del-vals (s|<seq> val) s)
-(def sort-by (s|<seq> f|<fun>) s)
-(def sort (s|<seq>) s)
-(def pick (f|<fun> x|<seq>) x)
-(def prefix? (x|<seq> prefix|<seq>) #f)
-(def suffix? (x|<seq> suffix|<seq>) #f)
-(def repeat (x|<seq> n|<int>) x)
+(def sort-by (s|<seq> f|<fun>)
+  (if (= (len s) 0)
+      s
+      (rep find-min ((min (elt s 0))
+                     (rest '())
+                     (e (nxt (enum s))))
+        (if (fin? e)
+            (add (sort-by rest f) min)
+            (let ((candidate (now e)))
+              (if (f min candidate)
+                  (find-min min (add rest candidate) (nxt e))
+                  (find-min candidate (add rest min) (nxt e))))))))
+                  
+(def sort (s|<seq>) (sort-by s <))
+(def pick (f|<fun> x|<seq>)
+  (rep do ((res '()) (e (enum x)))
+    (if (fin? e)
+        (col-res x (rev res))
+        (let ((el (now e)))
+          (if (f el)
+              (do (add res el) (nxt e))
+              (do res (nxt e)))))))
+(def prefix? (x|<seq> prefix|<seq>)
+  (= (sub x 0 (len prefix)) prefix))
+
+(def suffix? (x|<seq> suffix|<seq>)
+  (= (sub x (- (len x) (len suffix)) (len x)) suffix))
+
+(def repeat (x|<seq> n|<int>)
+  (if (<= n 0)
+      (nul (class-of x))
+      (cat x (repeat x (- n 1)))))
+
 (def split (x|<seq> sep|<any>) x)
 (def join (xs|<seq> sep|<seq>) xs)
+
+;; some specialisation of <col> methods to <seq>
+(def keys (s|<seq>) (below (len d)))
+(def add (s|<seq> e) (ins s e 0))
+(def add-new (s|<seq> e)
+  (if (mem? s e)
+      (add s e)
+      s))
+  
+(defclass <seq!> (<seq> <col!>))
 
 (def rev! (x|<seq!>) x)
 (def cat! (x|<seq!> &rest more) x)

@@ -12,6 +12,8 @@
 (def add (x|<vector> e|<any>)
   (as <vector> (add (as <lst> x) e)))
 
+(def len (x|<vector>) (%vector-length x))
+
 (defclass <vec-enum> ()
   ((enum-index <int> 0)
    (enum-vec <vector> #f)))
@@ -24,7 +26,7 @@
   (elt (enum-vec e) (enum-index e)))
 (def now-key (e|<vec-enum>)
   (enum-index e))
-(def nxt (e|<enum>)
+(def nxt (e|<vec-enum>)
   (make <vec-enum>
         :enum-index (+ 1 (enum-index e))
         :enum-vec (enum-vec e)))

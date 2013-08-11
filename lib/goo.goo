@@ -3,7 +3,7 @@
      runtime/scalar
      runtime/fun
      collection/collection
-;     collection/sequence
+     collection/sequence
      collection/string
      collection/list
 ;     collection/flat
@@ -21,6 +21,7 @@
  <subclass> t< type-class
  <union> t+
  t?
+ <class>
  class-name class-parents class-direct-props class-props
  prop-owner prop-getter prop-type prop-init prop-bound?
 

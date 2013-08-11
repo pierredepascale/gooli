@@ -38,8 +38,7 @@
 
 (def prop-owner (x|<class>) (error ""))
 
-(defclass <prop> ()
-  ())
+(defclass <prop> ())
 
 (def prop-getter (x|<prop>) (error ""))
 

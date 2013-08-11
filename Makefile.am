@@ -1,0 +1,4 @@
+AUTOMAKE_OPTIONS = foreign
+SUBDIRS = src
+EXTRA_DIST = README.md
+dist_doc_DATA = README.md AUTHOR

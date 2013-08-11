@@ -180,8 +180,8 @@
   (let ((entry (assq var (module-defined module))))
     (if entry
 	(begin
-	  ;(display ";; var ") (display var) (display " found in ")
-	  ;(display (module-name module)) (newline)
+	  ;; (display ";; var ") (display var) (display " found in ")
+	  ;; (display (module-name module)) (newline)
 	  entry)
 	#f)))
 
@@ -242,7 +242,11 @@
     ;(newline)
     (if (null? mods)
 	#f
-	(or (lookup-exported-name name (car mods))
+	(or (let ((e (lookup-exported-name name (car mods))))
+	      ;; (if e
+	      ;; 	  (begin (display ";; found exported ") (display name)
+	      ;; 		 (display " in mod ") (display (module-name (car mods))) (newline)))
+	      e)
 	    (see-in (cdr mods))))))
 
 (define (lookup-exported-name name module)
@@ -494,6 +498,8 @@
   (apply-method fun args))
 
 (define (ev-goo-app-methods meth next-methods args)
+  ;; (display ";; app-meth ")
+  ;; (for-each (lambda (a) (display a) (display "|") (display (class-name (class-of a)))) args) (newline)
   (apply-method meth args))
 
 (define (applicable-methods meths args)
@@ -540,7 +546,13 @@
   (let* ((methods (generic-methods fun))
          (m1 (applicable-methods methods args))
          (m2 (sorted-applicable-methods m1)))
-    ;(display ";; gen ") (display (length methods)) (display (length m2)) (newline)
+    ;; (display ";; gen ") (display (length methods)) (display (length m2)) (newline)
+    ;; (for-each (lambda (m)
+    ;; 		(display ";; sap ")
+    ;; 		(for-each (lambda (s) (display s)) (method-specs m))
+    ;; 		(newline))
+    ;; 	      m2)
+    ;; (newline)
     (if (eq? m2 '())
 	(error "no applicable methods in generic ~a" fun)
 	(ev-goo-app-methods (car m2) (cdr m2) args))))
@@ -612,21 +624,17 @@
   (cond ((class? class) (subtype? (class-of obj) class))
 	((singleton? class) (eq? obj (singleton-value class)))
 	((union? class) (any? (lambda (t) (is? obj t)) (union-types union)))
-	((subclass? class) (and (is? obj <class>) (subtype? obj (subclass-class obj))))
+	((subclass? class) (and (is? obj :class) (subtype? obj (subclass-class obj))))
 	(else #f)))
 
-(define (any? proc lst)
-  (if (null? lst)
-      #f
-      (or (proc (car lst))
-	  (any? proc (cdr lst)))))
-
-;;; TODO fixe bug with singleton
+;;; TODO fixe bugs
 (define (subtype-class? t1 t2)
-  (if (class? t1)
-      (or (eq? t1 t2)
-	  (any? (lambda (t) (subtype? t t2)) (class-supers t1)))
-      #f))
+  (cond ((class? t1)
+	 (or (eq? t1 t2)
+	     (any? (lambda (t) (subtype? t t2)) (class-supers t1))))
+	((singleton? t1)
+	 (is? (singleton-value t1) t2))
+	(else #f)))
 
 (define (subtype-singleton? t1 t2)
   (and (singleton? t1)
@@ -637,7 +645,7 @@
   ;;  (display ";; subtype ") (display t1) (display t2) (newline)
   (cond ((class? t2) (subtype-class? t1 t2))
 	((singleton? t2) (subtype-singleton? t1 t2))
-	((union? t2) (some? (lambda (t) (subtype? t1 t2)) (union-types t2)))
+	((union? t2) (any? (lambda (t) (subtype? t1 t2)) (union-types t2)))
 	((subclass? t2) (subtype? t1 (subclass-class t2)))
 	(else (error "unknown type relation" t1 t2))))
 
@@ -888,7 +896,7 @@
 
 (def %vector-ref ((v <vector>) (i <int>)) (vector-ref v (+ 1 i)))
 (def %vector-set! ((v <vector>) (i <int>) (o <any>)) (vector-set! v (+ 1 i) o))
-(def %vector-length ((v <vector>)) (vector-length v))
+(def %vector-length ((v <vector>)) (- (vector-length v) 1))
 
 (def %make-string ((size <num>) (fill <chr>)) (make-string size fill))
 (def %string-ref ((s <str>) (i <num>)) (string-ref s i))
