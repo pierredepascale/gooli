@@ -6,6 +6,7 @@ AC_INIT([goo], [0.1], [pierre.depascale@prefics.ch])
 AM_INIT_AUTOMAKE
 
 # Checks for programs.
+AC_PROG_CC
 
 # Checks for libraries.
 

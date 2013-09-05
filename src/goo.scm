@@ -1126,8 +1126,17 @@
     (let ((form (read-goo (current-input-port))))
       (if (eof-object? form)
           (display "Thank you!")
-          (let ((value (ev-goo form (make-env *goo-user* '()))))
-            (display ";; ") (print-goo value) (newline)
+	  (begin
+	    (with-exception-catcher
+	     (lambda (e)
+	       (if (error-exception? e)
+		   (write (cons (error-exception-message e)
+				(error-exception-parameters e)))
+		   (write "Internal error !"))
+	       (newline))
+	     (lambda () 
+	       (let ((value (ev-goo form (make-env *goo-user* '()))))
+		 (display ";; ") (print-goo value) (newline))))
             (repl))))))
 
 (define (main . args)
