@@ -1,7 +1,9 @@
 (use runtime/type
 ;     runtime/condition
+  runtime/macros
      runtime/scalar
      runtime/fun
+     runtime/symbol
      collection/collection
      collection/sequence
      collection/string
@@ -32,6 +34,9 @@
  
  
  to-str
+
+ ;; symbol
+ <sym>
  
  ;; log
  <log>
@@ -71,6 +76,9 @@
  <flo>
  flo-bits
 
+ ;; macros
+ quasiquote and or unless when rep for
+
  ;; collection.gooli
 <col>
 fab col fabs len
@@ -91,7 +99,7 @@ into elt! fill! add! del! zap!
 <seq>
 1st 2nd 3rd
 last pos finds
-add push pop rev cat sub sub* ins
+add push pop rev cat cat2 sub sub* ins
 del-dups del-vals sort-by sort pick
 prefix? suffix? repeat split join
 

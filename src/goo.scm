@@ -145,7 +145,8 @@
   (let ((name (cadr exp))
         (args (caddr exp))
         (code (cdddr exp)))
-    (bind-global! (env-module env) name (make-macro name (make-method name args (list :list) #f #f env code)))))
+    (bind-global! (env-module env) name (make-macro name (make-method name args (list :list) #f #f env code)))
+    name))
 
 ;;; literal
 
@@ -195,7 +196,7 @@
 	      (let ((entry (lookup-exported var (env-module env))))
 		(if entry
 		    (cdr entry)
-		    (error "unbound variable ~a in" var env))))))))
+		    (error "unbound variable ~a in ~a" var (module-name (env-module env))))))))))
 
 (define (ev-goo-variable exp env)
   (lookup exp env))
@@ -272,7 +273,7 @@
 	  %generic-add-method! %sorted-application-methods %method-applicable?
 	  %sup
 
-          %pair %head %tail %null?
+          %pair? %pair %head %tail %null?
           %make-vector %vector-ref %vector-set! %vector-length
 	  %make-string %string-ref %string-set! %string-length
 
@@ -311,7 +312,9 @@
   (let ((name (cadr exp))
         (formals/exp (caddr exp)))
     (if (null? (cdddr exp))
-        (bind-def! (env-module env) name (ev-goo formals/exp (bind-variable name #f env)))
+	(let ((value (ev-goo formals/exp (bind-variable name #f env))))
+	  (bind-def! (env-module env) name value)
+	  value)
         (let ((method (ev-goo-fun `(fun ,formals/exp
 					,@(cdddr exp))
 				  env)))
@@ -451,7 +454,7 @@
 
 (define (bind-arguments-rest-and-keys args env keys rest)
   (let ((env* (if rest
-		  (bind-variable rest (list->vector (cons 'vector args)) env)
+		  (bind-variable rest args env)
 		  env)))
     (if keys
 	(let lp ((env env*)
@@ -884,6 +887,7 @@
 
 ;; collection -- primitives
 
+(def %pair? ((h <any>)) (pair? h))
 (def %pair ((h <any>) (t <any>)) (cons h t))
 (def %head ((p <pair>)) (car p))
 (def %tail ((p <pair>)) (cdr p))

@@ -24,7 +24,15 @@
         (col-res x res)
         (do (add res (now e)) (nxt e)))))
 
-(def cat (x|<seq> &rest more) x)
+(def cat2 (x|<seq> y|<seq>) (%pair x y))
+(def cat* (l)
+  (if (%pair? l)
+      (cat2 (%head l) (cat* (%tail l)))
+      l))
+
+(def cat (&rest more)
+  (cat* more))
+
 (def sub (x|<seq> from|<int> below|<int>) x)
 (def sub* (x|<seq> from|<int>) (sub x from (len x)))
 (def ins (x|<seq> i|<int>) 1)
@@ -94,7 +102,7 @@
 (export <seq>
 	1st 2nd 3rd
 	last pos finds
-	add push pop rev cat sub sub* ins
+	add push pop rev cat cat2 sub sub* ins
 	del-dups del-vals sort-by sort pick
 	prefix? suffix? repeat split join
 	

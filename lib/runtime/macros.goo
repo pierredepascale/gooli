@@ -1,0 +1,132 @@
+;;; macros.goo -- macros
+
+(use primitives)
+
+;;; for use in the macro expansion of this file
+(def list (&rest l) l)
+(def cat (x y)
+  (if (%pair? x)
+      (%pair x (cat (%tail x) y))
+      y))
+
+(def tag-comma? (e)
+  (if (%pair? e)
+      (%eq? (%head e) 'unquote)
+      #f))
+
+(def tag-backquote? (e)
+  (if (%pair? e)
+      (%eq? (%head e) 'quasiquote)
+      #f))
+
+(def tag-comma-atsign? (e)
+  (if (%pair? e)
+      (%eq? (%head e) 'unquote-splicing)
+      #f))
+
+(def tag-data (e) (%tail e))
+
+;; taken from Alan Bawden paper on quasiquote
+(def qq-expand (x)
+  (if (tag-comma? x)
+      (tag-data x)
+      (if (tag-comma-atsign? x)
+          (error "illegal")
+          (if (tag-backquote? x)
+              (qq-expand (qq-expand (tag-data x)))
+              (if (%pair? x)
+                  (%pair 'cat
+                         (%pair (qq-expand-list (%head x))
+                                (%pair (qq-expand (%tail x))
+                                       '())))
+                  (%pair 'quote (%pair x '())))))))
+
+(def qq-expand-list (x)
+  (if (tag-comma? x)
+      (%pair 'list (%pair (tag-data x) '()))
+      (if (tag-comma-atsign? x)
+          (tag-data x)
+          (if (tag-backquote? x)
+              (qq-expand-list 
+               (qq-expand (tag-data x)))
+              (if (%pair? x)
+                  (%pair 'list
+                         (%pair (%pair 'cat
+                                       (%pair (qq-expand-list (%head x))
+                                              (%pair (qq-expand (%tail x))
+                                                     '())))))
+                  (%pair 'quote
+                         (%pair (%pair x '()) '())))))))
+
+(defmacro quasiquote (e)
+  (qq-expand (%tail e)))
+
+(defmacro and (e)
+  (let ((e (%tail e)))
+    (if (%null? e)
+        #t
+        (if (%null? (%tail e))
+            (%head e)
+            (%pair 'if
+                   (%pair (%head e)
+                          (%pair (%pair 'and (%tail e))
+                                 (%pair #f '()))))))))
+
+(defmacro or (e)
+  (let ((e (%tail e)))
+    (if (%null? e)
+        #f
+        (if (%null? (%tail e))
+            (%head e)
+            (%pair 'if
+                   (%pair (%head e)
+                          (%pair (%head e)
+                                 (%pair (%pair 'or (%tail e))
+                                        '()))))))))
+
+(defmacro unless (e)
+  (%pair 'if
+	 (%pair (%head (%tail e))
+		(%pair #f
+		       (%pair (%pair 'seq (%tail (%tail e)))
+			      '())))))
+
+(defmacro when (e)
+  (%pair 'if
+	 (%pair (%head (%tail e))
+		(%pair (%pair 'seq
+			      (%tail (%tail e)))
+		       (%pair #f '())))))
+
+(def map (f lst)
+  (if (%null? lst)
+      lst
+      (%pair (f (%head lst)) (map f (%tail lst)))))
+
+(def rep (e)
+  (let ((name (%head (%tail e)))
+	(bindings (%head (%tail (%tail e))))
+	(body (%tail (%tail (%tail e)))))
+    (let ((names (map (fun (e) (%head e)) bindings))
+	  (args (map (fun (e) (%head (%tail e))) bindings)))
+      (%pair 'loc
+	     (%pair (%pair (%pair name
+				  (%pair (%pair 'fun 
+						(%pair names body))
+					 '()))
+			   '())
+		    (%pair (%pair name args)
+			   '()))))))
+
+(def rep* (e)
+  (let ((name (%head (%tail e)))
+	(bindings (%head (%tail (%tail e))))
+	(body (%tail (%tail (%tail e)))))
+    (let ((names (map (fun (e) (%head e)) bindings))
+	  (args (map (fun (e) (%head (%tail e))) bindings)))
+      (list name names args body))))
+
+(export quasiquote and or
+	unless when
+	rep
+	for)

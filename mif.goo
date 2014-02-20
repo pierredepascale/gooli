@@ -1,0 +1,26 @@
+;;; mif.goo -- macro if
+
+(def match (template exp env) #f)
+(def match (t|<nil> e|<nil> env) env)
+(def match (t|<pair> e env)
+  (let ((h (head t)))
+    (if (= 'unquote h)
+        (pair e env)
+        (if (isa? e <pair>)
+            (let ((env* (match h (head e) env)))
+              (if env* (match (tail t) (tail e) env*)
+                  #f))
+            #f))))
+
+(def match (t|<str> e|<str> env) (if (= t e) env #f))
+(def match (t|<num> e|<num> env) (if (= t e) env #f))
+
+(defmacro mif (e)
+
+
+(def vars (e) '())
+(def vars (e|<pair>)
+  (if (= (head e) 'unquote)
+      (tail e)
+      (cat (vars (head e))
+           (vars (tail e)))))

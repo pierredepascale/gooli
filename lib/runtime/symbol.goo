@@ -1,0 +1,5 @@
+;;; symbol.goo --
+
+(use primitives)
+
+(export <sym>)

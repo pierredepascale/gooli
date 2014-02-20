@@ -6,7 +6,7 @@
   runtime/scalar
   collection/enum
   collection/collection
-  ;collection/sequence
+  collection/sequence
   )
 
 (def nul? (x|<lst>) #f)
@@ -23,10 +23,17 @@
 (def list (&rest elts) elts)
 (def lst* (&rest elts) elts)
 
-(def pair (h|<any> t|<lst>) (%pair h t))
+(def pair (h|<any> t|<any>) (%pair h t))
 
 (def as (type|(t= <lst>) x|<str>) '())
 (def as (type|(t= <str>) x|<lst>) "")
+
+(def cat2 (x|<nil> y|<nil>) x)
+(def cat2 (x|<seq> y|<nil>) x)
+(def cat2 (x|<nil> y|<seq>) y)
+(def cat2 (x|<pair> y|<lst>)
+  (%pair (%head x)
+         (cat2 (%tail x) y)))
 
 ;(def as (type|(t= <vector>) x|<lst>) '#())
 ;(def as (type|(t= <lst>) x|<vector>) '())
